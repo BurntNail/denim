@@ -2,7 +2,6 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use maud::html;
 use crate::error::{DenimResult};
-use crate::routes::events::internal_get_events;
 use crate::state::DenimState;
 
 pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<impl IntoResponse> {

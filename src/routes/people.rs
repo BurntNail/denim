@@ -1,11 +1,10 @@
 use axum::extract::{Query, State};
 use axum::Form;
 use maud::{html, Markup};
-use serde::Deserialize;
-use snafu::ResultExt;
-use crate::error::{DenimResult, MakeQuerySnafu};
+use crate::error::{DenimResult};
 use crate::state::DenimState;
-use crate::data::{IdForm, User};
+use crate::data::{IdForm, user::User, DataType};
+use crate::data::user::{FormGroup, HouseGroup, UserKind};
 use crate::maud_conveniences::title;
 
 pub async fn get_people (State(state): State<DenimState>) -> DenimResult<Markup> {
@@ -59,52 +58,67 @@ pub fn internal_get_add_people_form () -> Markup {
     }
 }
 
-#[derive(Deserialize)]
-pub struct AddPersonForm {
-    pub first_name: String,
-    pub pref_name: String,
-    pub surname: String,
-    pub email: String,
-}
 
-pub async fn put_new_person(State(state): State<DenimState>, Form(AddPersonForm { first_name, pref_name, surname, email }): Form<AddPersonForm>) -> DenimResult<Markup> {
-    let pref_name = if pref_name.is_empty() {None} else {Some(pref_name)};
 
-    let id = sqlx::query!("INSERT INTO users (first_name, pref_name, surname, email) VALUES ($1, $2, $3, $4) RETURNING id", first_name, pref_name, surname, email).fetch_one(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?.id;
-
+pub async fn put_new_person(State(state): State<DenimState>, Form(add_person_form): Form<<User as DataType>::FormForAdding>) -> DenimResult<Markup> {
+    let id = User::insert_into_database(add_person_form, state.get_connection().await?).await?;
     let all_people = internal_get_people(State(state.clone())).await?;
     let this_person = internal_get_person_in_detail(State(state.clone()), Query(IdForm{id})).await?;
     Ok(html!{
         (this_person)
-        div hx-swap-oob="outerHTML:#all_events" id="all_events" {
+        div hx-swap-oob="outerHTML:#all_people" id="all_people" {
             (all_people)
         }
     })
 }
 
 pub async fn delete_person (State(state): State<DenimState>, Query(IdForm{id}): Query<IdForm>) -> DenimResult<Markup> {
-    sqlx::query!("DELETE FROM users WHERE id = $1", id).execute(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?;
+    User::remove_from_database(id, state.get_connection().await?).await?;
 
     let all_people = internal_get_people(State(state.clone())).await?;
     let form = internal_get_add_people_form();
     Ok(html!{
         (form)
-        div hx-swap-oob="outerHTML:#all_events" id="all_people" {
+        div hx-swap-oob="outerHTML:#all_people" id="all_people" {
             (all_people)
         }
     })
 }
 
 pub async fn internal_get_people (State(state): State<DenimState>) -> DenimResult<Markup> {
-    let people = sqlx::query_as!(User, "SELECT * FROM users").fetch_all(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?;
+    let staff = User::get_all_staff(state.clone()).await?;
+    let developers = User::get_all_developers(state.clone()).await?;
+    let students = User::get_all_students(state.clone()).await?;
     
     Ok(html!{
-        div class="container mx-auto" {
-            h1 class="text-2xl font-semibold mb-4" {"People"}
-            div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" {
-                @for person in people {
-                    a hx-get="/internal/get_person" hx-target="#in_focus" hx-vals={"{\"id\": \"" (person.id) "\"}" } class="block rounded-lg shadow-md p-4 text-center bg-gray-700 hover:bg-gray-600" {
-                        (person)
+        div class="container mx-auto flex flex-col space-y-8" {
+            div {
+                h1 class="text-2xl font-semibold mb-4" {"Staff"}
+                div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" {
+                    @for person in staff {
+                        a hx-get="/internal/get_person" hx-target="#in_focus" hx-vals={"{\"id\": \"" (person.id) "\"}" } class="block rounded-lg shadow-md p-4 text-center bg-gray-700 hover:bg-gray-600" {
+                            (person)
+                        }
+                    }
+                }
+            }
+            div {
+                h1 class="text-2xl font-semibold mb-4" {"Developers"}
+                div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" {
+                    @for person in developers {
+                        a hx-get="/internal/get_person" hx-target="#in_focus" hx-vals={"{\"id\": \"" (person.id) "\"}" } class="block rounded-lg shadow-md p-4 text-center bg-gray-700 hover:bg-gray-600" {
+                            (person)
+                        }
+                    }
+                }
+            }
+            div {
+                h1 class="text-2xl font-semibold mb-4" {"Students"}
+                div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" {
+                    @for person in students {
+                        a hx-get="/internal/get_person" hx-target="#in_focus" hx-vals={"{\"id\": \"" (person.id) "\"}" } class="block rounded-lg shadow-md p-4 text-center bg-gray-700 hover:bg-gray-600" {
+                            (person)
+                        }
                     }
                 }
             }
@@ -113,7 +127,7 @@ pub async fn internal_get_people (State(state): State<DenimState>) -> DenimResul
 }
 
 pub async fn internal_get_person_in_detail(State(state): State<DenimState>, Query(IdForm {id}): Query<IdForm>) -> DenimResult<Markup> {
-    let person: User = sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id).fetch_one(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?;
+    let person = User::get_from_db_by_id(id, state.get_connection().await?).await?;
 
     Ok(html!{
         div class="container mx-auto" {
@@ -130,8 +144,33 @@ pub async fn internal_get_person_in_detail(State(state): State<DenimState>, Quer
                         }
                         (person.surname)
                     }
+                    @match person.user_kind {
+                        UserKind::Student {
+                            form: FormGroup {id: _, name: form_name},
+                            house: HouseGroup {id: _, name: house_name},
+                            events_participated
+                        } => {
+                            p class="text-gray-200 font-semibold" {
+                                "House: "
+                                span class="font-medium" {(house_name)}
+                            }
+                            p class="text-gray-200 font-semibold" {
+                                "Form: "
+                                span class="font-medium" {(form_name)}
+                            }
+                            p class="text-gray-200 font-semibold" {
+                                "House Events: "
+                                span class="font-medium" {(events_participated.len())}
+                            }
+                        },
+                        _ => {}
+                    }
                     p {
                         a href={"mailto:" (person.email)} class="text-blue-500" {(person.email)}
+                    }
+                    br;
+                    button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/people" hx-vals={"{\"id\": \"" (id) "\"}" } hx-target="#in_focus" {
+                        "Delete person"
                     }
                 }
             }

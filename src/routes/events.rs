@@ -1,13 +1,12 @@
 use axum::extract::{Query, State};
 use axum::Form;
-use chrono::NaiveDateTime;
 use maud::{html, Markup};
-use serde::Deserialize;
 use snafu::ResultExt;
-use uuid::Uuid;
-use crate::error::{DenimResult, MakeQuerySnafu, ParseTimeSnafu, ParseUuidSnafu};
+use crate::error::{DenimResult, MakeQuerySnafu};
 use crate::state::DenimState;
-use crate::data::{Event, IdForm, User};
+use crate::data::{DataType, IdForm};
+use crate::data::user::User;
+use crate::data::event::Event;
 use crate::maud_conveniences::{escape, render_table, title};
 
 pub async fn get_events (State(state): State<DenimState>) -> DenimResult<Markup> {
@@ -32,7 +31,7 @@ pub async fn get_events (State(state): State<DenimState>) -> DenimResult<Markup>
 }
 
 pub async fn internal_get_add_events_form (State(state): State<DenimState>) -> DenimResult<Markup> {
-    let staff = sqlx::query_as!(User, "SELECT u.id, u.first_name, u.pref_name, u.surname, u.email, u.bcrypt_hashed_password, u.magic_first_login_characters FROM staff s INNER JOIN users u ON s.user_id = u.id").fetch_all(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?;
+    let staff = User::get_all_staff(state.clone()).await?;
 
     Ok(html!{
         (title("Add New Event Form"))
@@ -72,30 +71,10 @@ pub async fn internal_get_add_events_form (State(state): State<DenimState>) -> D
     })
 }
 
-#[derive(Deserialize)]
-pub struct AddEventForm {
-    pub name: String,
-    pub date: String,
-    pub location: String,
-    pub extra_info: String,
-    pub associated_staff_member: String
-}
 
-pub async fn put_new_event (State(state): State<DenimState>, Form(AddEventForm { name, date, location, extra_info, associated_staff_member }): Form<AddEventForm>) -> DenimResult<Markup> {
-    let date = NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M").context(ParseTimeSnafu {
-        original: date
-    })?;
 
-    let location = if location.is_empty() {None} else {Some(location)};
-    let extra_info = if extra_info.is_empty() {None} else {Some(extra_info)};
-    let associated_staff_member = if associated_staff_member.is_empty() {None} else {
-        Some(Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu {
-            original: associated_staff_member
-        })?)
-    };
-
-    let id = sqlx::query!("INSERT INTO events (name, date, location, extra_info, associated_staff_member) VALUES ($1, $2, $3, $4, $5) RETURNING id", name, date, location, extra_info, associated_staff_member).fetch_one(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?.id;
-    //gets weird when i try to use query_as, idk
+pub async fn put_new_event (State(state): State<DenimState>, Form(add_event_form): Form<<Event as DataType>::FormForAdding>) -> DenimResult<Markup> {
+    let id = Event::insert_into_database(add_event_form, state.get_connection().await?).await?;
 
     let all_events = internal_get_events(State(state.clone())).await?;
     let this_event = internal_get_event_in_detail(State(state.clone()), Query(IdForm{id})).await?;
@@ -108,7 +87,7 @@ pub async fn put_new_event (State(state): State<DenimState>, Form(AddEventForm {
 }
 
 pub async fn delete_event (State(state): State<DenimState>, Query(IdForm{id}): Query<IdForm>) -> DenimResult<Markup> {
-    sqlx::query!("DELETE FROM events WHERE id = $1", id).execute(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?;
+    Event::remove_from_database(id, state.get_connection().await?).await?;
 
     let all_events = internal_get_events(State(state.clone())).await?;
     let form = internal_get_add_events_form(State(state.clone())).await?;
@@ -121,14 +100,7 @@ pub async fn delete_event (State(state): State<DenimState>, Query(IdForm{id}): Q
 }
 
 pub async fn internal_get_event_in_detail (State(state): State<DenimState>, Query(IdForm {id}): Query<IdForm>) -> DenimResult<Markup> {
-    let mut connection = state.get_connection().await?;
-    let event = sqlx::query_as!(Event, "SELECT * FROM events WHERE id = $1", id).fetch_one(&mut *connection).await.context(MakeQuerySnafu)?;
-    let associated_staff_member = if let Some(assoc_staff_id) = event.associated_staff_member {
-        Some(sqlx::query_as!(User, "SELECT * FROM users u WHERE id = $1", assoc_staff_id).fetch_one(&mut *connection).await.context(MakeQuerySnafu)?)
-    } else {
-        None
-    };
-    drop(connection);
+    let event = Event::get_from_db_by_id(id, state.get_connection().await?).await?;
 
     Ok(html!{
         (title(event.name))
@@ -144,7 +116,7 @@ pub async fn internal_get_event_in_detail (State(state): State<DenimState>, Quer
                 "Time: "
                 span class="font-medium" {(event.date.format("%a %d/%m/%y @ %H:%M"))}
             }
-            @if let Some(staff) = associated_staff_member {
+            @if let Some(staff) = event.associated_staff_member {
                 p class="text-gray-200 font-semibold" {
                     "Staff Member: "
                     span class="font-medium" {(staff)}
@@ -157,7 +129,7 @@ pub async fn internal_get_event_in_detail (State(state): State<DenimState>, Quer
                 }
             }
             br;
-            button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/events" hx-vals={"{\"id\": \"" (event.id) "\"}" } hx-target="#in_focus" {
+            button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/events" hx-vals={"{\"id\": \"" (id) "\"}" } hx-target="#in_focus" {
                 "Delete event"
             }
         }
@@ -165,7 +137,7 @@ pub async fn internal_get_event_in_detail (State(state): State<DenimState>, Quer
 }
 
 pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
-    let events = sqlx::query_as!(Event, "SELECT * FROM events").fetch_all(&mut *state.get_connection().await?).await.context(MakeQuerySnafu)?;
+    let events = Event::get_all(state.clone()).await?;
 
     Ok(render_table(
         "Events",

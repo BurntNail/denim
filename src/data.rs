@@ -1,41 +1,26 @@
-use chrono::NaiveDateTime;
-use maud::Render;
 use serde::Deserialize;
+use sqlx::pool::PoolConnection;
+use sqlx::Postgres;
 use uuid::Uuid;
+use crate::error::DenimResult;
+use crate::state::DenimState;
 
-#[derive(Debug)]
-pub struct User {
-    pub id: Uuid,
-    pub first_name: String,
-    pub pref_name: Option<String>,
-    pub surname: String,
-    pub email: String,
-    pub bcrypt_hashed_password: Option<String>,
-    pub magic_first_login_characters: Option<String>,
-}
+pub mod user;
+pub mod event;
 
-impl Render for User {
-    fn render_to(&self, buffer: &mut String) {
-        match self.pref_name.as_deref() {
-            Some(pn) => buffer.push_str(pn),
-            None => buffer.push_str(&self.first_name)
-        };
-        buffer.push(' ');
-        buffer.push_str(&self.surname);
-    }
-}
-
-#[derive(Debug)]
-pub struct Event {
-    pub id: Uuid,
-    pub name: String,
-    pub date: NaiveDateTime,
-    pub location: Option<String>,
-    pub extra_info: Option<String>,
-    pub associated_staff_member: Option<Uuid>
-}
 
 #[derive(Deserialize)]
 pub struct IdForm {
     pub id: Uuid
+}
+
+pub trait DataType: Sized {
+    type Id;
+    type FormForId;
+    type FormForAdding;
+    
+    async fn get_from_db_by_id (id: Self::Id, conn: PoolConnection<Postgres>) -> DenimResult<Self>;
+    async fn get_all (state: DenimState) -> DenimResult<Vec<Self>>;
+    async fn insert_into_database (to_be_added: Self::FormForAdding, conn: PoolConnection<Postgres>) -> DenimResult<Self::Id>;
+    async fn remove_from_database (id: Self::Id, conn: PoolConnection<Postgres>) -> DenimResult<()>;
 }

@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 use crate::config::RuntimeConfiguration;
 use crate::routes::events::{delete_event, get_events, internal_get_add_events_form, internal_get_event_in_detail, internal_get_events, put_new_event};
 use crate::routes::index::{get_index_route};
-use crate::routes::people::{get_people, internal_get_add_people_form, internal_get_people, internal_get_person_in_detail, put_new_person};
+use crate::routes::people::{delete_person, get_people, internal_get_add_people_form, internal_get_people, internal_get_person_in_detail, put_new_person};
 use crate::state::DenimState;
 
 mod state;
@@ -27,7 +27,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(get_index_route))
         .route("/events", get(get_events).put(put_new_event).delete(delete_event))
-        .route("/people", get(get_people).put(put_new_person))
+        .route("/people", get(get_people).put(put_new_person).delete(delete_person))
         .route("/internal/get_people", get(internal_get_people))
         .route("/internal/get_events", get(internal_get_events))
         .route("/internal/get_person", get(internal_get_person_in_detail))

@@ -14,3 +14,4 @@ dotenvy = { version = "0.15.7", features = ["cli"] }
 serde = { version = "1.0.219", features = ["derive"] }
 uuid = { version = "1.16.0", features = ["serde", "v4"] }
 chrono = "0.4.40"
+futures = { version = "0.3.31", default-features = false }
