@@ -1,18 +1,18 @@
-use std::sync::Arc;
+use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu};
 use dotenvy::var;
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
-use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct RuntimeConfiguration {
-    db_config: Arc<DbConfig>
+    db_config: Arc<DbConfig>,
 }
 
 impl RuntimeConfiguration {
-    pub fn new () -> DenimResult<Self> {
+    pub fn new() -> DenimResult<Self> {
         Ok(Self {
-            db_config: Arc::new(DbConfig::new()?)
+            db_config: Arc::new(DbConfig::new()?),
         })
     }
 
@@ -31,9 +31,9 @@ pub struct DbConfig {
 }
 
 impl DbConfig {
-    pub fn new () -> DenimResult<Self> {
+    pub fn new() -> DenimResult<Self> {
         let get_env_var = |name| var(name).context(BadEnvVarSnafu { name });
-        
+
         Ok(Self {
             user: get_env_var("DB_USER")?,
             password: SecretString::from(get_env_var("DB_PASSWORD")?),
@@ -42,8 +42,15 @@ impl DbConfig {
             database: get_env_var("DB_NAME")?,
         })
     }
-    
-    pub fn get_db_path (&self) -> String {
-        format!("postgres://{}:{}@{}:{}/{}", self.user, self.password.expose_secret(), self.path, self.port, self.database)
+
+    pub fn get_db_path(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.user,
+            self.password.expose_secret(),
+            self.path,
+            self.port,
+            self.database
+        )
     }
 }

@@ -1,15 +1,16 @@
-use axum::extract::{Query, State};
-use axum::Form;
-use maud::{html, Markup};
-use snafu::ResultExt;
-use crate::error::{DenimResult, MakeQuerySnafu};
-use crate::state::DenimState;
-use crate::data::{DataType, IdForm};
-use crate::data::user::User;
-use crate::data::event::Event;
-use crate::maud_conveniences::{escape, render_table, title};
+use crate::{
+    data::{DataType, IdForm, event::Event, user::User},
+    error::{DenimResult},
+    maud_conveniences::{escape, render_table, title},
+    state::DenimState,
+};
+use axum::{
+    Form,
+    extract::{Query, State},
+};
+use maud::{Markup, html};
 
-pub async fn get_events (State(state): State<DenimState>) -> DenimResult<Markup> {
+pub async fn get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
     let internal_events = internal_get_events(State(state.clone())).await?;
     let internal_form = internal_get_add_events_form(State(state.clone())).await?;
 
@@ -30,10 +31,10 @@ pub async fn get_events (State(state): State<DenimState>) -> DenimResult<Markup>
     }))
 }
 
-pub async fn internal_get_add_events_form (State(state): State<DenimState>) -> DenimResult<Markup> {
+pub async fn internal_get_add_events_form(State(state): State<DenimState>) -> DenimResult<Markup> {
     let staff = User::get_all_staff(state.clone()).await?;
 
-    Ok(html!{
+    Ok(html! {
         (title("Add New Event Form"))
         form hx-put="/events" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
             div class="mb-4" {
@@ -71,14 +72,16 @@ pub async fn internal_get_add_events_form (State(state): State<DenimState>) -> D
     })
 }
 
-
-
-pub async fn put_new_event (State(state): State<DenimState>, Form(add_event_form): Form<<Event as DataType>::FormForAdding>) -> DenimResult<Markup> {
+pub async fn put_new_event(
+    State(state): State<DenimState>,
+    Form(add_event_form): Form<<Event as DataType>::FormForAdding>,
+) -> DenimResult<Markup> {
     let id = Event::insert_into_database(add_event_form, state.get_connection().await?).await?;
 
     let all_events = internal_get_events(State(state.clone())).await?;
-    let this_event = internal_get_event_in_detail(State(state.clone()), Query(IdForm{id})).await?;
-    Ok(html!{
+    let this_event =
+        internal_get_event_in_detail(State(state.clone()), Query(IdForm { id })).await?;
+    Ok(html! {
         (this_event)
         div hx-swap-oob="outerHTML:#all_events" id="all_events" {
             (all_events)
@@ -86,12 +89,15 @@ pub async fn put_new_event (State(state): State<DenimState>, Form(add_event_form
     })
 }
 
-pub async fn delete_event (State(state): State<DenimState>, Query(IdForm{id}): Query<IdForm>) -> DenimResult<Markup> {
+pub async fn delete_event(
+    State(state): State<DenimState>,
+    Query(IdForm { id }): Query<IdForm>,
+) -> DenimResult<Markup> {
     Event::remove_from_database(id, state.get_connection().await?).await?;
 
     let all_events = internal_get_events(State(state.clone())).await?;
     let form = internal_get_add_events_form(State(state.clone())).await?;
-    Ok(html!{
+    Ok(html! {
         (form)
         div hx-swap-oob="outerHTML:#all_events" id="all_events" {
             (all_events)
@@ -99,10 +105,13 @@ pub async fn delete_event (State(state): State<DenimState>, Query(IdForm{id}): Q
     })
 }
 
-pub async fn internal_get_event_in_detail (State(state): State<DenimState>, Query(IdForm {id}): Query<IdForm>) -> DenimResult<Markup> {
+pub async fn internal_get_event_in_detail(
+    State(state): State<DenimState>,
+    Query(IdForm { id }): Query<IdForm>,
+) -> DenimResult<Markup> {
     let event = Event::get_from_db_by_id(id, state.get_connection().await?).await?;
 
-    Ok(html!{
+    Ok(html! {
         (title(event.name))
         div class="p-6 mb-4" {
             h2 class="text-lg font-semibold mb-2 text-gray-300 underline" {"Event Information"}

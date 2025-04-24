@@ -1,14 +1,14 @@
+use crate::{
+    data::{DataType, IdForm, user::User},
+    error::{DenimResult, MakeQuerySnafu, ParseTimeSnafu, ParseUuidSnafu},
+    state::DenimState,
+};
 use chrono::NaiveDateTime;
 use futures::StreamExt;
 use serde::Deserialize;
 use snafu::ResultExt;
-use sqlx::pool::PoolConnection;
-use sqlx::Postgres;
+use sqlx::{Postgres, pool::PoolConnection};
 use uuid::Uuid;
-use crate::data::{DataType, IdForm};
-use crate::data::user::User;
-use crate::error::{DenimResult, MakeQuerySnafu, ParseTimeSnafu, ParseUuidSnafu};
-use crate::state::DenimState;
 
 #[derive(Debug)]
 pub struct Event {
@@ -17,7 +17,7 @@ pub struct Event {
     pub date: NaiveDateTime,
     pub location: Option<String>,
     pub extra_info: Option<String>,
-    pub associated_staff_member: Option<User>
+    pub associated_staff_member: Option<User>,
 }
 
 #[derive(Deserialize)]
@@ -26,7 +26,7 @@ pub struct AddEventForm {
     pub date: String,
     pub location: String,
     pub extra_info: String,
-    pub associated_staff_member: String
+    pub associated_staff_member: String,
 }
 
 impl DataType for Event {
@@ -34,11 +34,17 @@ impl DataType for Event {
     type FormForId = IdForm;
     type FormForAdding = AddEventForm;
 
-    async fn get_from_db_by_id(id: Self::Id, mut conn: PoolConnection<Postgres>) -> DenimResult<Self> {
-        let most_bits = sqlx::query!("SELECT * FROM events WHERE id = $1", id).fetch_one(&mut *conn).await.context(MakeQuerySnafu)?;
+    async fn get_from_db_by_id(
+        id: Self::Id,
+        mut conn: PoolConnection<Postgres>,
+    ) -> DenimResult<Self> {
+        let most_bits = sqlx::query!("SELECT * FROM events WHERE id = $1", id)
+            .fetch_one(&mut *conn)
+            .await
+            .context(MakeQuerySnafu)?;
         let associated_staff_member = match most_bits.associated_staff_member {
             Some(id) => Some(User::get_from_db_by_id(id, conn).await?),
-            None => None
+            None => None,
         };
 
         Ok(Self {
@@ -47,7 +53,7 @@ impl DataType for Event {
             date: most_bits.date,
             location: most_bits.location,
             extra_info: most_bits.extra_info,
-            associated_staff_member
+            associated_staff_member,
         })
     }
 
@@ -58,36 +64,61 @@ impl DataType for Event {
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?.id;
-            let next_event = Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
+            let next_event =
+                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
             all.push(next_event);
         }
 
         Ok(all)
     }
 
-    async fn insert_into_database(to_be_added: Self::FormForAdding, mut conn: PoolConnection<Postgres>) -> DenimResult<Self::Id> {
+    async fn insert_into_database(
+        to_be_added: Self::FormForAdding,
+        mut conn: PoolConnection<Postgres>,
+    ) -> DenimResult<Self::Id> {
         let AddEventForm {
-            name, date, location, extra_info, associated_staff_member
+            name,
+            date,
+            location,
+            extra_info,
+            associated_staff_member,
         } = to_be_added;
 
-        let date = NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M").context(ParseTimeSnafu {
-            original: date
-        })?;
+        let date = NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M")
+            .context(ParseTimeSnafu { original: date })?;
 
-        let location = if location.is_empty() {None} else {Some(location)};
-        let extra_info = if extra_info.is_empty() {None} else {Some(extra_info)};
-        let associated_staff_member = if associated_staff_member.is_empty() {None} else {
-            Some(Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu {
-                original: associated_staff_member
-            })?)
+        let location = if location.is_empty() {
+            None
+        } else {
+            Some(location)
+        };
+        let extra_info = if extra_info.is_empty() {
+            None
+        } else {
+            Some(extra_info)
+        };
+        let associated_staff_member = if associated_staff_member.is_empty() {
+            None
+        } else {
+            Some(
+                Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu {
+                    original: associated_staff_member,
+                })?,
+            )
         };
 
         //gets weird when i try to use query_as, idk
         Ok(sqlx::query!("INSERT INTO events (name, date, location, extra_info, associated_staff_member) VALUES ($1, $2, $3, $4, $5) RETURNING id", name, date, location, extra_info, associated_staff_member).fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id)
     }
 
-    async fn remove_from_database(id: Self::Id, mut conn: PoolConnection<Postgres>) -> DenimResult<()> {
-        sqlx::query!("DELETE FROM events WHERE id = $1", id).execute(&mut *conn).await.context(MakeQuerySnafu)?;
+    async fn remove_from_database(
+        id: Self::Id,
+        mut conn: PoolConnection<Postgres>,
+    ) -> DenimResult<()> {
+        sqlx::query!("DELETE FROM events WHERE id = $1", id)
+            .execute(&mut *conn)
+            .await
+            .context(MakeQuerySnafu)?;
         Ok(())
     }
 }

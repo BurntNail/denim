@@ -1,30 +1,28 @@
-use maud::{html, Markup, DOCTYPE};
+use crate::{
+    config::RuntimeConfiguration,
+    error::{DenimResult, GetDatabaseConnectionSnafu, OpenDatabaseSnafu},
+};
+use maud::{DOCTYPE, Markup, html};
 use snafu::ResultExt;
-use sqlx::{Pool, Postgres};
-use sqlx::pool::PoolConnection;
-use sqlx::postgres::PgPoolOptions;
-use crate::config::RuntimeConfiguration;
-use crate::error::{DenimResult, GetDatabaseConnectionSnafu, OpenDatabaseSnafu};
+use sqlx::{Pool, Postgres, pool::PoolConnection, postgres::PgPoolOptions};
 
 #[derive(Clone)]
 pub struct DenimState {
     pool: Pool<Postgres>,
-    config: RuntimeConfiguration
+    config: RuntimeConfiguration,
 }
 
 impl DenimState {
-    pub async fn new (options: PgPoolOptions, config: RuntimeConfiguration) -> DenimResult<Self> {
+    pub async fn new(options: PgPoolOptions, config: RuntimeConfiguration) -> DenimResult<Self> {
         let pool = options
             .connect(&config.db_config().get_db_path())
-            .await.context(OpenDatabaseSnafu)?;
-        
-        Ok(Self {
-            pool,
-            config
-        })
+            .await
+            .context(OpenDatabaseSnafu)?;
+
+        Ok(Self { pool, config })
     }
 
-    pub fn render (&self, markup: Markup) -> Markup {
+    pub fn render(&self, markup: Markup) -> Markup {
         html! {
             (DOCTYPE)
             html {
@@ -52,7 +50,10 @@ impl DenimState {
         }
     }
 
-    pub async fn get_connection (&self) -> DenimResult<PoolConnection<Postgres>> {
-        self.pool.acquire().await.context(GetDatabaseConnectionSnafu)
+    pub async fn get_connection(&self) -> DenimResult<PoolConnection<Postgres>> {
+        self.pool
+            .acquire()
+            .await
+            .context(GetDatabaseConnectionSnafu)
     }
 }

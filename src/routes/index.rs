@@ -1,8 +1,6 @@
-use axum::extract::State;
-use axum::response::IntoResponse;
+use crate::{error::DenimResult, state::DenimState};
+use axum::{extract::State, response::IntoResponse};
 use maud::html;
-use crate::error::{DenimResult};
-use crate::state::DenimState;
 
 pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<impl IntoResponse> {
     Ok(state.render(html! {
@@ -10,7 +8,6 @@ pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<imp
             h1 class="text-2xl font-semibold mb-6 text-center" {
                 "Denim!"
             }
-    
             div class="flex flex-row space-x-4 justify-center" {
                 a href="/events" class="bg-slate-600 hover:bg-slate-800 font-bold py-2 px-4 rounded"  {
                     "View Events"

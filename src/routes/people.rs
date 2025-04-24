@@ -1,16 +1,22 @@
-use axum::extract::{Query, State};
-use axum::Form;
-use maud::{html, Markup};
-use crate::error::{DenimResult};
-use crate::state::DenimState;
-use crate::data::{IdForm, user::User, DataType};
-use crate::data::user::{FormGroup, HouseGroup, UserKind};
-use crate::maud_conveniences::title;
+use crate::{
+    data::{
+        DataType, IdForm,
+        user::{FormGroup, HouseGroup, User, UserKind},
+    },
+    error::DenimResult,
+    maud_conveniences::title,
+    state::DenimState,
+};
+use axum::{
+    Form,
+    extract::{Query, State},
+};
+use maud::{Markup, html};
 
-pub async fn get_people (State(state): State<DenimState>) -> DenimResult<Markup> {
+pub async fn get_people(State(state): State<DenimState>) -> DenimResult<Markup> {
     let internal_people = internal_get_people(State(state.clone())).await?;
     let internal_form = internal_get_add_people_form();
-    
+
     Ok(state.render(html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
             div class="container flex flex-row justify-center space-x-4" {
@@ -28,8 +34,8 @@ pub async fn get_people (State(state): State<DenimState>) -> DenimResult<Markup>
     }))
 }
 
-pub fn internal_get_add_people_form () -> Markup {
-    html!{
+pub fn internal_get_add_people_form() -> Markup {
+    html! {
         (title("Add New Person Form"))
         form hx-put="/people" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
             div class="mb-4" {
@@ -58,13 +64,15 @@ pub fn internal_get_add_people_form () -> Markup {
     }
 }
 
-
-
-pub async fn put_new_person(State(state): State<DenimState>, Form(add_person_form): Form<<User as DataType>::FormForAdding>) -> DenimResult<Markup> {
+pub async fn put_new_person(
+    State(state): State<DenimState>,
+    Form(add_person_form): Form<<User as DataType>::FormForAdding>,
+) -> DenimResult<Markup> {
     let id = User::insert_into_database(add_person_form, state.get_connection().await?).await?;
     let all_people = internal_get_people(State(state.clone())).await?;
-    let this_person = internal_get_person_in_detail(State(state.clone()), Query(IdForm{id})).await?;
-    Ok(html!{
+    let this_person =
+        internal_get_person_in_detail(State(state.clone()), Query(IdForm { id })).await?;
+    Ok(html! {
         (this_person)
         div hx-swap-oob="outerHTML:#all_people" id="all_people" {
             (all_people)
@@ -72,12 +80,15 @@ pub async fn put_new_person(State(state): State<DenimState>, Form(add_person_for
     })
 }
 
-pub async fn delete_person (State(state): State<DenimState>, Query(IdForm{id}): Query<IdForm>) -> DenimResult<Markup> {
+pub async fn delete_person(
+    State(state): State<DenimState>,
+    Query(IdForm { id }): Query<IdForm>,
+) -> DenimResult<Markup> {
     User::remove_from_database(id, state.get_connection().await?).await?;
 
     let all_people = internal_get_people(State(state.clone())).await?;
     let form = internal_get_add_people_form();
-    Ok(html!{
+    Ok(html! {
         (form)
         div hx-swap-oob="outerHTML:#all_people" id="all_people" {
             (all_people)
@@ -85,12 +96,12 @@ pub async fn delete_person (State(state): State<DenimState>, Query(IdForm{id}): 
     })
 }
 
-pub async fn internal_get_people (State(state): State<DenimState>) -> DenimResult<Markup> {
+pub async fn internal_get_people(State(state): State<DenimState>) -> DenimResult<Markup> {
     let staff = User::get_all_staff(state.clone()).await?;
     let developers = User::get_all_developers(state.clone()).await?;
     let students = User::get_all_students(state.clone()).await?;
-    
-    Ok(html!{
+
+    Ok(html! {
         div class="container mx-auto flex flex-col space-y-8" {
             div {
                 h1 class="text-2xl font-semibold mb-4" {"Staff"}
@@ -126,10 +137,13 @@ pub async fn internal_get_people (State(state): State<DenimState>) -> DenimResul
     })
 }
 
-pub async fn internal_get_person_in_detail(State(state): State<DenimState>, Query(IdForm {id}): Query<IdForm>) -> DenimResult<Markup> {
+pub async fn internal_get_person_in_detail(
+    State(state): State<DenimState>,
+    Query(IdForm { id }): Query<IdForm>,
+) -> DenimResult<Markup> {
     let person = User::get_from_db_by_id(id, state.get_connection().await?).await?;
 
-    Ok(html!{
+    Ok(html! {
         div class="container mx-auto" {
             div class="rounded-lg shadow-md overflow-hidden bg-gray-800 max-w-md mx-auto" {
                 div class="p-4" {
@@ -144,7 +158,7 @@ pub async fn internal_get_person_in_detail(State(state): State<DenimState>, Quer
                         }
                         (person.surname)
                     }
-                    @match person.user_kind {
+                    @match person.kind {
                         UserKind::Student {
                             form: FormGroup {id: _, name: form_name},
                             house: HouseGroup {id: _, name: house_name},

@@ -1,7 +1,9 @@
-use std::num::ParseIntError;
-use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse, Response};
+use axum::{
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
+};
 use snafu::Snafu;
+use std::num::ParseIntError;
 
 pub type DenimResult<T> = Result<T, DenimError>;
 
@@ -9,35 +11,27 @@ pub type DenimResult<T> = Result<T, DenimError>;
 #[snafu(visibility(pub))]
 pub enum DenimError {
     #[snafu(display("Error opening database: {}", source))]
-    OpenDatabase {
-        source: sqlx::Error
-    },
+    OpenDatabase { source: sqlx::Error },
     #[snafu(display("Error getting db connection: {}", source))]
-    GetDatabaseConnection {
-        source: sqlx::Error
-    },
+    GetDatabaseConnection { source: sqlx::Error },
     #[snafu(display("Error making query: {}", source))]
-    MakeQuery {
-        source: sqlx::Error
-    },
+    MakeQuery { source: sqlx::Error },
     #[snafu(display("Unable to retrieve env var {} because of {}", name, source))]
     BadEnvVar {
         source: dotenvy::Error,
-        name: &'static str
+        name: &'static str,
     },
     #[snafu(display("Unable to parse port because {}", source))]
-    ParsePort {
-        source: ParseIntError
-    },
+    ParsePort { source: ParseIntError },
     #[snafu(display("Unable to parse date {:?} because of {}", original, source))]
     ParseTime {
         source: chrono::ParseError,
-        original: String
+        original: String,
     },
     #[snafu(display("Unable to parse uuid {:?} because of {}", original, source))]
     ParseUuid {
         source: uuid::Error,
-        original: String
+        original: String,
     },
 }
 

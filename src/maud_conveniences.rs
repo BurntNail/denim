@@ -1,7 +1,11 @@
+use maud::{Escaper, Markup, PreEscaped, Render, html};
 use std::fmt::Write;
-use maud::{html, Escaper, Markup, PreEscaped, Render};
 
-pub fn render_table<const N: usize> (overall_title: &'static str, titles: [&'static str; N], items: Vec<[Markup; N]>) -> Markup {
+pub fn render_table<const N: usize>(
+    overall_title: &'static str,
+    titles: [&'static str; N],
+    items: Vec<[Markup; N]>,
+) -> Markup {
     html! {
         div class="container mx-auto" {
             (title(overall_title))
@@ -29,14 +33,14 @@ pub fn render_table<const N: usize> (overall_title: &'static str, titles: [&'sta
     }
 }
 
-pub fn escape (s: impl AsRef<str>) -> PreEscaped<String> {
+pub fn escape(s: impl AsRef<str>) -> PreEscaped<String> {
     let mut output = String::new();
     Escaper::new(&mut output).write_str(s.as_ref()).unwrap(); //this method always succeeds - strange api!
     PreEscaped(output)
 }
 
-pub fn title (s: impl Render) -> Markup {
-    html!{
+pub fn title(s: impl Render) -> Markup {
+    html! {
         h1 class="text-2xl font-semibold mb-4" {(s)}
     }
 }
