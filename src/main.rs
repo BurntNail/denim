@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 use crate::config::RuntimeConfiguration;
 use crate::routes::events::internal_get_events;
 use crate::routes::index::{get_index_route};
-use crate::routes::people::internal_get_people;
+use crate::routes::people::{internal_get_people, internal_get_person};
 use crate::state::DenimState;
 
 mod state;
@@ -28,6 +28,7 @@ async fn main() {
         .route("/", get(get_index_route))
         .route("/internal/get_people", get(internal_get_people))
         .route("/internal/get_events", get(internal_get_events))
+        .route("/internal/get_person", get(internal_get_person))
         .with_state(state);
 
     let server_ip = env::var("DENIM_SERVER_IP").unwrap_or_else(|_| "127.0.0.1:8080".to_string());

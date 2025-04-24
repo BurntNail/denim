@@ -1,4 +1,5 @@
-use maud::{html, Markup};
+use std::fmt::Write;
+use maud::{html, Escaper, Markup, PreEscaped};
 
 pub fn render_table<const N: usize> (overall_title: &'static str, titles: [&'static str; N], items: Vec<[Markup; N]>) -> Markup {
     html! {
@@ -26,4 +27,10 @@ pub fn render_table<const N: usize> (overall_title: &'static str, titles: [&'sta
             }
         }
     }
+}
+
+pub fn escape (s: impl AsRef<str>) -> PreEscaped<String> {
+    let mut output = String::new();
+    Escaper::new(&mut output).write_str(s.as_ref()).unwrap(); //this method always succeeds - strange api!
+    PreEscaped(output)
 }

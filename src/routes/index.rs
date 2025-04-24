@@ -6,8 +6,6 @@ use crate::routes::events::internal_get_events;
 use crate::state::DenimState;
 
 pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<impl IntoResponse> {
-    let default_info = internal_get_events(State(state.clone())).await?;
-    
     Ok(state.render(html! {
         div class="bg-gray-800 p-8 rounded shadow-md max-w-md w-full" {
             h1 class="text-2xl font-semibold mb-6 text-center" {
@@ -24,8 +22,11 @@ pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<imp
             }
         }
         
-        div id="click_result" class="bg-gray-800 rounded shadow-md max-w-2xl w-full m-4 p-8" {
-            (default_info)
+        div class="bg-gray-800 rounded shadow-md max-w-2xl w-full m-4 p-8" {
+            div class="flex flex-col" {
+                div id="click_result" class="m-4 p-8" {}
+                div id="person_in_detail" class="m-4 p-8" {}
+            }
         }
     }))
 }

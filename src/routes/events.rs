@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::error::{DenimResult, MakeQuerySnafu};
 use crate::state::DenimState;
 use crate::data::{Event, User};
-use crate::maud_conveniences::render_table;
+use crate::maud_conveniences::{escape, render_table};
 
 pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
     let mut connection = state.get_connection().await?;
@@ -22,26 +22,20 @@ pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult
         }
     }
     
-    let escape_to_preescaped = |txt: String| {
-        let mut output = String::new();
-        Escaper::new(&mut output).write_str(&txt).unwrap(); //this method always succeeds - strange api!
-        PreEscaped(output)
-    };
-    
     Ok(render_table(
         "Events",
         ["Name", "Date", "Location", "Extra Info", "Staff"],
         events.into_iter()
             .map(|evt| {
                 [
-                    escape_to_preescaped(evt.name),
-                    escape_to_preescaped(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
-                    escape_to_preescaped(evt.location.unwrap_or_else(|| "N/A".to_string())),
-                    escape_to_preescaped(evt.extra_info.unwrap_or_default()),
+                    escape(evt.name),
+                    escape(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
+                    escape(evt.location.unwrap_or_else(|| "N/A".to_string())),
+                    escape(evt.extra_info.unwrap_or_default()),
                     html! {
                         @if let Some(staff_member) = evt.associated_staff_member {
                             @let staff_member = staff_member_names.get(&staff_member).unwrap();
-                            a href={"/people/" (staff_member.id)} {
+                            a hx-get="/internal/get_person" hx-target="#person_in_detail" hx-vals={"{\"id\": \"" (staff_member.id) "\"}" } class="hover:text-blue-600 underline" {
                                 (staff_member)
                             }
                         } @ else {
