@@ -28,7 +28,17 @@ pub enum DenimError {
     #[snafu(display("Unable to parse port because {}", source))]
     ParsePort {
         source: ParseIntError
-    }
+    },
+    #[snafu(display("Unable to parse date {:?} because of {}", original, source))]
+    ParseTime {
+        source: chrono::ParseError,
+        original: String
+    },
+    #[snafu(display("Unable to parse uuid {:?} because of {}", original, source))]
+    ParseUuid {
+        source: uuid::Error,
+        original: String
+    },
 }
 
 impl IntoResponse for DenimError {

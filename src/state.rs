@@ -36,6 +36,16 @@ impl DenimState {
                     title { "Denim?" }
                 }
                 body class="bg-gray-900 h-screen flex flex-col items-center justify-center text-white" {
+                    nav class="bg-gray-800 shadow fixed top-0 z-10 rounded-lg" {
+                        div class="container mx-auto px-4" {
+                            div class="flex items-center justify-center h-16 space-x-4" {
+                                a href="/" class="text-gray-300 bg-fuchsia-900 hover:bg-fuchsia-700 px-3 py-2 rounded-md text-md font-bold" {"Denim"}
+                                a href="/events" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"Events"}
+                                a href="/people" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"People"}
+                            }
+                        }
+                    }
+
                     (markup)
                 }
             }

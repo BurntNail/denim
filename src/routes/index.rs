@@ -13,19 +13,12 @@ pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<imp
             }
     
             div class="flex flex-row space-x-4 justify-center" {
-                button class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded" hx-get="/internal/get_events" hx-target="#click_result" {
+                a href="/events" class="bg-slate-600 hover:bg-slate-800 font-bold py-2 px-4 rounded"  {
                     "View Events"
                 }
-                button class="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded" hx-get="/internal/get_people" hx-target="#click_result" {
+                a href="/people" class="bg-slate-600 hover:bg-slate-800 font-bold py-2 px-4 rounded"  {
                     "View People"
                 }
-            }
-        }
-        
-        div class="bg-gray-800 rounded shadow-md max-w-2xl w-full m-4 p-8" {
-            div class="flex flex-col" {
-                div id="click_result" class="m-4 p-8" {}
-                div id="person_in_detail" class="m-4 p-8" {}
             }
         }
     }))
