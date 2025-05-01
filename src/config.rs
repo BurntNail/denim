@@ -1,23 +1,78 @@
 use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu};
 use dotenvy::var;
+use rand::{Rng, rng};
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
-use std::sync::Arc;
+use std::{collections::HashMap, ops::Range, sync::Arc};
 
 #[derive(Clone, Debug)]
 pub struct RuntimeConfiguration {
     db_config: Arc<DbConfig>,
+    auth_config: Arc<AuthConfig>,
 }
 
 impl RuntimeConfiguration {
     pub fn new() -> DenimResult<Self> {
         Ok(Self {
             db_config: Arc::new(DbConfig::new()?),
+            auth_config: Arc::new(AuthConfig::new()),
         })
     }
 
     pub fn db_config(&self) -> Arc<DbConfig> {
         self.db_config.clone()
+    }
+
+    pub fn auth_config(&self) -> Arc<AuthConfig> {
+        self.auth_config.clone()
+    }
+}
+
+#[derive(Debug)]
+pub struct AuthConfig {
+    word_len_range: Range<usize>,
+    words: HashMap<usize, Vec<Arc<str>>>,
+    numbers_range: Range<usize>,
+}
+
+impl AuthConfig {
+    pub fn new() -> Self {
+        //TODO: let users actually configure this lol
+        let default_word_len_range = 5..9;
+        let default_numbers_range = 1_000..10_000;
+
+        let words = {
+            let all_words = include_str!("../words.txt");
+            let mut map: HashMap<usize, Vec<Arc<str>>> = HashMap::new();
+
+            for (len, word) in all_words
+                .lines()
+                .map(str::trim)
+                .map(|word| (word.len(), word))
+            {
+                map.entry(len).or_default().push(word.into());
+            }
+
+            map
+        };
+
+        Self {
+            word_len_range: default_word_len_range,
+            numbers_range: default_numbers_range,
+            words,
+        }
+    }
+
+    pub fn generate(&self) -> Option<String> {
+        let mut rng = rng();
+
+        let word_len = rng.random_range(self.word_len_range.clone());
+        let list_to_pick_from = self.words.get(&word_len)?;
+        let chosen_word = list_to_pick_from[rng.random_range(0..list_to_pick_from.len())].clone();
+
+        let chosen_number = rng.random_range(self.numbers_range.clone());
+
+        Some(format!("{chosen_word}_{chosen_number}"))
     }
 }
 

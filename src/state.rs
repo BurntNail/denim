@@ -1,12 +1,21 @@
 use crate::{
+    auth::{DenimSession, add_password},
     config::RuntimeConfiguration,
-    error::{DenimResult, GetDatabaseConnectionSnafu, OpenDatabaseSnafu},
+    data::{
+        DataType,
+        user::{AddPersonForm, User},
+    },
+    error::{
+        DenimResult, GeneratePasswordSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
+        MigrateSnafu, OpenDatabaseSnafu,
+    },
+    maud_conveniences::render_nav,
 };
 use maud::{DOCTYPE, Markup, html};
-use snafu::ResultExt;
-use sqlx::{Pool, Postgres, pool::PoolConnection, postgres::PgPoolOptions};
+use snafu::{OptionExt, ResultExt};
+use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DenimState {
     pool: Pool<Postgres>,
     config: RuntimeConfiguration,
@@ -19,10 +28,59 @@ impl DenimState {
             .await
             .context(OpenDatabaseSnafu)?;
 
+        sqlx::migrate!().run(&pool).await.context(MigrateSnafu)?;
+
         Ok(Self { pool, config })
     }
 
-    pub fn render(&self, markup: Markup) -> Markup {
+    pub async fn ensure_admin_exists(&self) -> DenimResult<()> {
+        if sqlx::query!("SELECT exists(SELECT 1 FROM developers)")
+            .fetch_one(&self.pool)
+            .await
+            .context(MakeQuerySnafu)?
+            .exists
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
+        //generate user
+        let id = User::insert_into_database(
+            AddPersonForm {
+                first_name: "Example".to_string(),
+                pref_name: String::new(),
+                surname: "Admin".to_string(),
+                email: "example.admin@den.im".to_string(),
+            },
+            self.get_connection().await?,
+        )
+        .await?;
+
+        //add to devs
+        sqlx::query!("INSERT INTO developers (user_id) VALUES ($1)", id)
+            .execute(&self.pool)
+            .await
+            .context(MakeQuerySnafu)?;
+
+        //generate password
+        let password = self
+            .config
+            .auth_config()
+            .generate()
+            .context(GeneratePasswordSnafu)?;
+
+        println!("Adding {password:?} for admin user \"example.admin@den.im\"");
+
+        //add password
+        add_password(id, password.into(), self.get_connection().await?, true).await?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::unused_self, clippy::needless_pass_by_value)] //in case self is ever needed :), and to allow direct html! usage
+    pub fn render(&self, auth_session: DenimSession, markup: Markup) -> Markup {
+        let nav = render_nav(auth_session.user);
+
         html! {
             (DOCTYPE)
             html {
@@ -34,16 +92,7 @@ impl DenimState {
                     title { "Denim?" }
                 }
                 body class="bg-gray-900 h-screen flex flex-col items-center justify-center text-white" {
-                    nav class="bg-gray-800 shadow fixed top-0 z-10 rounded-lg" {
-                        div class="container mx-auto px-4" {
-                            div class="flex items-center justify-center h-16 space-x-4" {
-                                a href="/" class="text-gray-300 bg-fuchsia-900 hover:bg-fuchsia-700 px-3 py-2 rounded-md text-md font-bold" {"Denim"}
-                                a href="/events" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"Events"}
-                                a href="/people" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"People"}
-                            }
-                        }
-                    }
-
+                    (nav)
                     (markup)
                 }
             }
@@ -55,5 +104,9 @@ impl DenimState {
             .acquire()
             .await
             .context(GetDatabaseConnectionSnafu)
+    }
+
+    pub async fn get_transaction(&self) -> DenimResult<Transaction<Postgres>> {
+        self.pool.begin().await.context(GetDatabaseConnectionSnafu)
     }
 }

@@ -1,28 +1,31 @@
+use std::sync::LazyLock;
 use crate::{
     data::{DataType, IdForm},
     error::{DenimResult, MakeQuerySnafu},
     state::DenimState,
 };
+use axum_login::AuthUser;
 use futures::StreamExt;
 use maud::Render;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
 use sqlx::{Postgres, pool::PoolConnection};
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FormGroup {
     pub id: i32,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HouseGroup {
     pub id: i32,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UserKind {
     User,
     Student {
@@ -34,15 +37,16 @@ pub enum UserKind {
     Developer,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct User {
     pub id: Uuid,
     pub first_name: String,
     pub pref_name: Option<String>,
     pub surname: String,
     pub email: String,
-    pub bcrypt_hashed_password: Option<String>,
-    pub magic_first_login_characters: Option<String>,
+    pub bcrypt_hashed_password: Option<SecretString>,
+    pub access_token: Option<SecretString>,
+    pub current_password_is_default: bool,
     pub kind: UserKind,
 }
 
@@ -62,11 +66,15 @@ impl DataType for User {
     async fn get_from_db_by_id(
         id: Self::Id,
         mut conn: PoolConnection<Postgres>,
-    ) -> DenimResult<Self> {
-        let most_bits = sqlx::query!("SELECT * FROM users WHERE id = $1", id)
-            .fetch_one(&mut *conn)
+    ) -> DenimResult<Option<Self>> {
+        let Some(most_bits) = sqlx::query!("SELECT * FROM users WHERE id = $1", id)
+            .fetch_optional(&mut *conn)
             .await
-            .context(MakeQuerySnafu)?;
+            .context(MakeQuerySnafu)?
+        else {
+            return Ok(None);
+        };
+
         let user_kind = if sqlx::query!("SELECT * FROM developers WHERE user_id = $1", id)
             .fetch_optional(&mut *conn)
             .await
@@ -122,16 +130,17 @@ impl DataType for User {
             UserKind::User
         };
 
-        Ok(Self {
+        Ok(Some(Self {
             id,
             first_name: most_bits.first_name,
             pref_name: most_bits.pref_name,
             surname: most_bits.surname,
             email: most_bits.email,
-            bcrypt_hashed_password: most_bits.bcrypt_hashed_password,
-            magic_first_login_characters: most_bits.magic_first_login_characters,
+            bcrypt_hashed_password: most_bits.bcrypt_hashed_password.map(SecretString::from),
+            access_token: most_bits.access_token.map(SecretString::from),
+            current_password_is_default: most_bits.current_password_is_default,
             kind: user_kind,
-        })
+        }))
     }
 
     async fn get_all(state: DenimState) -> DenimResult<Vec<Self>> {
@@ -141,8 +150,11 @@ impl DataType for User {
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?.id;
-            let next_user = Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
-            all.push(next_user);
+            if let Some(next_user) =
+                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
+            {
+                all.push(next_user);
+            }
         }
 
         Ok(all)
@@ -187,8 +199,11 @@ impl User {
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?.user_id;
-            let next_user = Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
-            all.push(next_user);
+            if let Some(next_user) =
+                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
+            {
+                all.push(next_user);
+            }
         }
 
         Ok(all)
@@ -201,8 +216,11 @@ impl User {
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?.user_id;
-            let next_user = Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
-            all.push(next_user);
+            if let Some(next_user) =
+                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
+            {
+                all.push(next_user);
+            }
         }
 
         Ok(all)
@@ -215,8 +233,11 @@ impl User {
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?.user_id;
-            let next_user = Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
-            all.push(next_user);
+            if let Some(next_user) =
+                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
+            {
+                all.push(next_user);
+            }
         }
 
         Ok(all)
@@ -231,5 +252,22 @@ impl Render for User {
         }
         buffer.push(' ');
         buffer.push_str(&self.surname);
+    }
+}
+
+impl AuthUser for User {
+    type Id = Uuid;
+
+    fn id(&self) -> Self::Id {
+        self.id
+    }
+
+    fn session_auth_hash(&self) -> &[u8] {
+        static EMPTY_SECRET_STRING: LazyLock<SecretString> = LazyLock::new(|| SecretString::from(""));
+
+        self.access_token.as_ref().unwrap_or_else(
+            || self.bcrypt_hashed_password.as_ref()
+                .unwrap_or(&EMPTY_SECRET_STRING),
+        ).expose_secret().as_bytes()
     }
 }

@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic, clippy::all, clippy::nursery)]
 
 use crate::{
+    auth::{backend::DenimAuthBackend, postgres_store::PostgresSessionStore},
     config::RuntimeConfiguration,
     routes::{
         events::{
@@ -8,18 +9,28 @@ use crate::{
             internal_get_events, put_new_event,
         },
         index::get_index_route,
+        login::{get_login, post_login, post_logout},
         people::{
             delete_person, get_people, internal_get_add_people_form, internal_get_people,
             internal_get_person_in_detail, put_new_person,
         },
+        profile::get_profile,
     },
     state::DenimState,
 };
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
+use axum_login::{
+    AuthManagerLayerBuilder,
+    tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration},
+};
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use tokio::net::TcpListener;
 
+mod auth;
 mod config;
 mod data;
 mod error;
@@ -37,6 +48,18 @@ async fn main() {
         .await
         .expect("unable to create state");
 
+    state
+        .ensure_admin_exists()
+        .await
+        .expect("unable to ensure admin exists");
+
+    let session_store = PostgresSessionStore::new(state.clone());
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_expiry(Expiry::OnInactivity(Duration::days(5)));
+
+    let auth_backend = DenimAuthBackend::new(state.clone());
+    let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
+
     let app = Router::new()
         .route("/", get(get_index_route))
         .route(
@@ -47,6 +70,9 @@ async fn main() {
             "/people",
             get(get_people).put(put_new_person).delete(delete_person),
         )
+        .route("/profile", get(get_profile))
+        .route("/login", get(get_login).post(post_login))
+        .route("/logout", post(post_logout))
         .route("/internal/get_people", get(internal_get_people))
         .route("/internal/get_events", get(internal_get_events))
         .route("/internal/get_person", get(internal_get_person_in_detail))
@@ -59,6 +85,7 @@ async fn main() {
             "/internal/get_people_form",
             get(internal_get_add_people_form()),
         ) //static data, so just call it here to avoid re-calling it every time
+        .layer(auth_layer)
         .with_state(state);
 
     let server_ip = env::var("DENIM_SERVER_IP").unwrap_or_else(|_| "127.0.0.1:8080".to_string());

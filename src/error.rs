@@ -2,8 +2,11 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
+use axum_login::tower_sessions::cookie::time::{OffsetDateTime, error::ComponentRange};
+use chrono::{DateTime, Utc};
 use snafu::Snafu;
 use std::num::ParseIntError;
+use uuid::Uuid;
 
 pub type DenimResult<T> = Result<T, DenimError>;
 
@@ -16,6 +19,21 @@ pub enum DenimError {
     GetDatabaseConnection { source: sqlx::Error },
     #[snafu(display("Error making query: {}", source))]
     MakeQuery { source: sqlx::Error },
+    #[snafu(display("Error migrating DB schema: {}", source))]
+    MigrateError { source: sqlx::migrate::MigrateError },
+    #[snafu(display("Error converting {} to `chrono::NaiveDateTime`", odt))]
+    InvalidDateTime { odt: OffsetDateTime },
+    #[snafu(display(
+        "Error converting {} to `time::OffsetDateTime` because {}",
+        utc_dt,
+        source
+    ))]
+    InvalidChronoDateTime {
+        source: ComponentRange,
+        utc_dt: DateTime<Utc>,
+    },
+    #[snafu(display("Error serialising with rmp_serde: {}", source))]
+    RmpSerdeEncode { source: rmp_serde::encode::Error },
     #[snafu(display("Unable to retrieve env var {} because of {}", name, source))]
     BadEnvVar {
         source: dotenvy::Error,
@@ -33,6 +51,18 @@ pub enum DenimError {
         source: uuid::Error,
         original: String,
     },
+    #[snafu(display("Unable to find event with UUID: {}", id))]
+    MissingEvent { id: Uuid },
+    #[snafu(display("Unable to find user with UUID: {}", id))]
+    MissingUser { id: Uuid },
+    #[snafu(display("Error with bcrypt: {}", source))]
+    Bcrypt { source: bcrypt::BcryptError },
+    #[snafu(display("Error with sessions: {}", source))]
+    TowerSession {
+        source: axum_login::tower_sessions::session::Error,
+    },
+    #[snafu(display("Unable to generate password"))]
+    GeneratePassword,
 }
 
 impl IntoResponse for DenimError {

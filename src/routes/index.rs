@@ -1,9 +1,12 @@
-use crate::{error::DenimResult, state::DenimState};
+use crate::{auth::DenimSession, error::DenimResult, state::DenimState};
 use axum::{extract::State, response::IntoResponse};
 use maud::html;
 
-pub async fn get_index_route(State(state): State<DenimState>) -> DenimResult<impl IntoResponse> {
-    Ok(state.render(html! {
+pub async fn get_index_route(
+    State(state): State<DenimState>,
+    session: DenimSession,
+) -> DenimResult<impl IntoResponse> {
+    Ok(state.render(session, html! {
         div class="bg-gray-800 p-8 rounded shadow-md max-w-md w-full" {
             h1 class="text-2xl font-semibold mb-6 text-center" {
                 "Denim!"

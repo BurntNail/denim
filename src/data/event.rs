@@ -37,24 +37,27 @@ impl DataType for Event {
     async fn get_from_db_by_id(
         id: Self::Id,
         mut conn: PoolConnection<Postgres>,
-    ) -> DenimResult<Self> {
-        let most_bits = sqlx::query!("SELECT * FROM events WHERE id = $1", id)
-            .fetch_one(&mut *conn)
+    ) -> DenimResult<Option<Self>> {
+        let Some(most_bits) = sqlx::query!("SELECT * FROM events WHERE id = $1", id)
+            .fetch_optional(&mut *conn)
             .await
-            .context(MakeQuerySnafu)?;
+            .context(MakeQuerySnafu)?
+        else {
+            return Ok(None);
+        };
         let associated_staff_member = match most_bits.associated_staff_member {
-            Some(id) => Some(User::get_from_db_by_id(id, conn).await?),
+            Some(id) => User::get_from_db_by_id(id, conn).await?,
             None => None,
         };
 
-        Ok(Self {
+        Ok(Some(Self {
             id,
             name: most_bits.name,
             date: most_bits.date,
             location: most_bits.location,
             extra_info: most_bits.extra_info,
             associated_staff_member,
-        })
+        }))
     }
 
     async fn get_all(state: DenimState) -> DenimResult<Vec<Self>> {
@@ -64,9 +67,11 @@ impl DataType for Event {
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?.id;
-            let next_event =
-                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?;
-            all.push(next_event);
+            if let Some(next_event) =
+                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
+            {
+                all.push(next_event);
+            }
         }
 
         Ok(all)

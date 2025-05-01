@@ -16,7 +16,10 @@ pub trait DataType: Sized {
     type FormForId;
     type FormForAdding;
 
-    async fn get_from_db_by_id(id: Self::Id, conn: PoolConnection<Postgres>) -> DenimResult<Self>;
+    async fn get_from_db_by_id(
+        id: Self::Id,
+        conn: PoolConnection<Postgres>,
+    ) -> DenimResult<Option<Self>>;
     async fn get_all(state: DenimState) -> DenimResult<Vec<Self>>;
     async fn insert_into_database(
         to_be_added: Self::FormForAdding,

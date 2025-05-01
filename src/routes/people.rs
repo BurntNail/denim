@@ -1,9 +1,10 @@
 use crate::{
+    auth::DenimSession,
     data::{
         DataType, IdForm,
         user::{FormGroup, HouseGroup, User, UserKind},
     },
-    error::DenimResult,
+    error::{DenimError, DenimResult},
     maud_conveniences::title,
     state::DenimState,
 };
@@ -13,11 +14,14 @@ use axum::{
 };
 use maud::{Markup, html};
 
-pub async fn get_people(State(state): State<DenimState>) -> DenimResult<Markup> {
+pub async fn get_people(
+    State(state): State<DenimState>,
+    session: DenimSession,
+) -> DenimResult<Markup> {
     let internal_people = internal_get_people(State(state.clone())).await?;
     let internal_form = internal_get_add_people_form();
 
-    Ok(state.render(html!{
+    Ok(state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
             div class="container flex flex-row justify-center space-x-4" {
                 div id="all_people" {
@@ -141,7 +145,9 @@ pub async fn internal_get_person_in_detail(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    let person = User::get_from_db_by_id(id, state.get_connection().await?).await?;
+    let Some(person) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+        return Err(DenimError::MissingUser { id });
+    };
 
     Ok(html! {
         div class="container mx-auto" {

@@ -18,7 +18,7 @@ CREATE TABLE users (
     surname TEXT NOT NULL,
     email TEXT NOT NULL,
     bcrypt_hashed_password TEXT,
-    magic_first_login_characters TEXT
+    current_password_is_default BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE staff (
