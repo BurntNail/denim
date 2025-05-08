@@ -15,12 +15,14 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct FormGroup {
+    #[allow(dead_code)]
     pub id: i32,
     pub name: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct HouseGroup {
+    #[allow(dead_code)]
     pub id: i32,
     pub name: String,
 }
@@ -46,6 +48,7 @@ pub struct User {
     pub email: String,
     pub bcrypt_hashed_password: Option<SecretString>,
     pub access_token: Option<SecretString>,
+    #[allow(dead_code)]
     pub current_password_is_default: bool,
     pub kind: UserKind,
 }

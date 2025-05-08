@@ -63,6 +63,8 @@ pub enum DenimError {
     },
     #[snafu(display("Unable to generate password"))]
     GeneratePassword,
+    #[snafu(display("Tried to get user information, found either no user or the incorrect kind of user"))]
+    UnableToFindUserInfo
 }
 
 impl IntoResponse for DenimError {
