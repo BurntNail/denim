@@ -126,7 +126,7 @@ pub async fn post_login(
     }
 }
 
-pub async fn post_logout(mut session: DenimSession) -> DenimResult<Markup> {
+pub async fn post_logout(mut session: DenimSession) -> DenimResult<impl IntoResponse> {
     convert_error(session.logout().await)?;
-    Ok(render_nav(None))
+    Ok(Redirect::to("/"))
 }
