@@ -1,16 +1,18 @@
-use std::sync::LazyLock;
 use crate::{
+    auth::PermissionsTarget,
     data::{DataType, IdForm},
-    error::{DenimResult, MakeQuerySnafu},
+    error::{DenimError, DenimResult, MakeQuerySnafu},
+    maud_conveniences::title,
     state::DenimState,
 };
 use axum_login::AuthUser;
 use futures::StreamExt;
-use maud::Render;
+use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
 use sqlx::{Postgres, pool::PoolConnection};
+use std::sync::LazyLock;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -195,6 +197,27 @@ impl DataType for User {
 }
 
 impl User {
+    pub fn get_permissions(&self) -> PermissionsTarget {
+        match self.kind {
+            UserKind::User => PermissionsTarget::SEE_PHOTOS,
+            UserKind::Student { .. } => {
+                PermissionsTarget::SEE_PHOTOS | PermissionsTarget::SIGN_SELF_UP
+            }
+            UserKind::Staff => PermissionsTarget::all() - PermissionsTarget::IMPORT_CSVS,
+            UserKind::Developer => PermissionsTarget::all(),
+        }
+    }
+
+    pub fn ensure_can(&self, needed: PermissionsTarget) -> DenimResult<()> {
+        let found = self.get_permissions();
+
+        if found.contains(needed) {
+            Ok(())
+        } else {
+            Err(DenimError::IncorrectPermissions { needed, found })
+        }
+    }
+
     pub async fn get_all_staff(state: DenimState) -> DenimResult<Vec<Self>> {
         let mut start_connection = state.get_connection().await?;
         let mut ids = sqlx::query!("SELECT user_id FROM staff").fetch(&mut *start_connection);
@@ -258,6 +281,30 @@ impl Render for User {
     }
 }
 
+pub struct FullUserNameDisplay<'a>(pub &'a User);
+impl Render for FullUserNameDisplay<'_> {
+    fn render(&self) -> Markup {
+        let name_part = html! {
+            (self.0.first_name)
+            " "
+            @if let Some(pref_name) = self.0.pref_name.as_ref() {
+                span class="italic" {
+                    "\""
+                    (pref_name)
+                    "\""
+                }
+                " "
+            }
+            (self.0.surname)
+        };
+
+        html! {
+            (title(name_part))
+            a href={"mailto:" (self.0.email)} target="_blank" class="text-blue-200 underline" {(self.0.email)}
+        }
+    }
+}
+
 impl AuthUser for User {
     type Id = Uuid;
 
@@ -266,11 +313,17 @@ impl AuthUser for User {
     }
 
     fn session_auth_hash(&self) -> &[u8] {
-        static EMPTY_SECRET_STRING: LazyLock<SecretString> = LazyLock::new(|| SecretString::from(""));
+        static EMPTY_SECRET_STRING: LazyLock<SecretString> =
+            LazyLock::new(|| SecretString::from(""));
 
-        self.access_token.as_ref().unwrap_or_else(
-            || self.bcrypt_hashed_password.as_ref()
-                .unwrap_or(&EMPTY_SECRET_STRING),
-        ).expose_secret().as_bytes()
+        self.access_token
+            .as_ref()
+            .unwrap_or_else(|| {
+                self.bcrypt_hashed_password
+                    .as_ref()
+                    .unwrap_or(&EMPTY_SECRET_STRING)
+            })
+            .expose_secret()
+            .as_bytes()
     }
 }

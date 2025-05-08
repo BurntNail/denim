@@ -116,7 +116,7 @@ impl SessionStore for PostgresSessionStore {
             .get_connection()
             .await
             .map_err(|e| SSError::Backend(e.to_string()))?;
-        
+
         Self::save_session(&mut *conn, session_record)
             .await
             .map_err(|e| SSError::Encode(e.to_string()))?;

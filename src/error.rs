@@ -1,3 +1,4 @@
+use crate::auth::{PermissionsTarget, backend::DenimAuthBackend};
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
@@ -63,8 +64,24 @@ pub enum DenimError {
     },
     #[snafu(display("Unable to generate password"))]
     GeneratePassword,
-    #[snafu(display("Tried to get user information, found either no user or the incorrect kind of user"))]
-    UnableToFindUserInfo
+    #[snafu(display(
+        "Tried to get user information, found either no user or the incorrect kind of user"
+    ))]
+    UnableToFindUserInfo,
+    #[snafu(display("Tried to {:?}, only had {:?}", needed.iter_names().collect::<Vec<_>>(), found.iter_names().collect::<Vec<_>>()))]
+    IncorrectPermissions {
+        needed: PermissionsTarget,
+        found: PermissionsTarget,
+    },
+}
+
+impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
+    fn from(value: axum_login::Error<DenimAuthBackend>) -> Self {
+        match value {
+            axum_login::Error::Session(source) => Self::TowerSession { source },
+            axum_login::Error::Backend(backend) => backend,
+        }
+    }
 }
 
 impl IntoResponse for DenimError {

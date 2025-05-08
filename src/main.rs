@@ -14,7 +14,14 @@ use crate::{
             delete_person, get_people, internal_get_add_people_form, internal_get_people,
             internal_get_person_in_detail, put_new_person,
         },
-        profile::get_profile,
+        profile::{
+            get_profile, internal_get_profile_edit_email, internal_get_profile_edit_first_name,
+            internal_get_profile_edit_password, internal_get_profile_edit_pref_name,
+            internal_get_profile_edit_surname, internal_get_profile_student_display,
+            internal_get_profile_student_form_house_display, internal_post_profile_edit_email,
+            internal_post_profile_edit_first_name, internal_post_profile_edit_password,
+            internal_post_profile_edit_pref_name, internal_post_profile_edit_surname,
+        },
     },
     state::DenimState,
 };
@@ -84,7 +91,35 @@ async fn main() {
         .route(
             "/internal/get_people_form",
             get(internal_get_add_people_form()),
-        ) //static data, so just call it here to avoid re-calling it every time
+        )
+        .route(
+            "/internal/profile/get_user_specific",
+            get(internal_get_profile_student_display),
+        )
+        .route(
+            "/internal/profile/get_student_form_house_display",
+            get(internal_get_profile_student_form_house_display),
+        )
+        .route(
+            "/internal/profile/edit_first_name",
+            get(internal_get_profile_edit_first_name).post(internal_post_profile_edit_first_name),
+        )
+        .route(
+            "/internal/profile/edit_pref_name",
+            get(internal_get_profile_edit_pref_name).post(internal_post_profile_edit_pref_name),
+        )
+        .route(
+            "/internal/profile/edit_surname",
+            get(internal_get_profile_edit_surname).post(internal_post_profile_edit_surname),
+        )
+        .route(
+            "/internal/profile/edit_email",
+            get(internal_get_profile_edit_email).post(internal_post_profile_edit_email),
+        )
+        .route(
+            "/internal/profile/edit_password",
+            get(internal_get_profile_edit_password()).post(internal_post_profile_edit_password),
+        )
         .layer(auth_layer)
         .with_state(state);
 

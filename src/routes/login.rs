@@ -1,21 +1,16 @@
 use crate::{
-    auth::{
-        DenimSession,
-        backend::{DenimAuthBackend, DenimAuthCredentials},
-    },
-    error::{DenimResult, TowerSessionSnafu},
-    maud_conveniences::render_nav,
+    auth::{DenimSession, backend::DenimAuthCredentials},
+    error::DenimResult,
     state::DenimState,
 };
 use axum::{
     Form,
     extract::{Query, State},
-    response::Redirect,
+    response::{IntoResponse, Redirect},
 };
 use maud::{Markup, html};
 use secrecy::SecretString;
 use serde::Deserialize;
-use snafu::ResultExt;
 
 #[derive(Deserialize)]
 pub struct LoginOptions {
@@ -81,16 +76,6 @@ pub struct LoginForm {
     next: Option<String>,
 }
 
-fn convert_error<T>(e: Result<T, axum_login::Error<DenimAuthBackend>>) -> DenimResult<T> {
-    match e {
-        Ok(x) => Ok(x),
-        Err(e) => match e {
-            axum_login::Error::Session(session) => Err(session).context(TowerSessionSnafu),
-            axum_login::Error::Backend(backend) => Err(backend),
-        },
-    }
-}
-
 pub async fn post_login(
     mut session: DenimSession,
     Form(LoginForm {
@@ -103,20 +88,16 @@ pub async fn post_login(
         .authenticate(DenimAuthCredentials::EmailPassword { email, password })
         .await
     {
-        Err(e) => convert_error(Err(e)),
+        Err(e) => Err(e.into()),
         Ok(Some(user)) => match session.login(&user).await {
             Ok(()) => {
-                match session.login(&user).await {
-                    Ok(()) => {
-                        let next = next.as_deref().unwrap_or("/");
-                        Ok(Redirect::to(next))
-                    }
-                    Err(e) => convert_error(Err(e)),
-                }
+                let next = next.as_deref().unwrap_or("/");
+                Ok(Redirect::to(next))
             }
-            Err(e) => convert_error(Err(e)),
+            Err(e) => Err(e.into()),
         },
         Ok(None) => {
+            //TODO: if default password, send to change default password page :)
             let mut redirect = "/login?login_failed=true".to_string();
             if let Some(next) = next {
                 redirect += format!("&to={next}").as_str();
@@ -127,6 +108,6 @@ pub async fn post_login(
 }
 
 pub async fn post_logout(mut session: DenimSession) -> DenimResult<impl IntoResponse> {
-    convert_error(session.logout().await)?;
+    session.logout().await?;
     Ok(Redirect::to("/"))
 }
