@@ -13,6 +13,7 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
+use crate::data::user::{FullUserNameDisplay, UsernameDisplay};
 
 #[axum::debug_handler]
 pub async fn get_people(
@@ -155,16 +156,7 @@ pub async fn internal_get_person_in_detail(
             div class="rounded-lg shadow-md overflow-hidden bg-gray-800 max-w-md mx-auto" {
                 div class="p-4" {
                     h1 class="text-2xl font-semibold mb-2" {(person)}
-                    p class="text-sm italic" {
-                        (person.first_name)
-                        " "
-                        @if let Some(pref_name) = person.pref_name {
-                            "\""
-                            (pref_name)
-                            "\" "
-                        }
-                        (person.surname)
-                    }
+                    (FullUserNameDisplay(&person, UsernameDisplay::empty()))
                     @match person.kind {
                         UserKind::Student {
                             form: FormGroup {id: _, name: form_name},

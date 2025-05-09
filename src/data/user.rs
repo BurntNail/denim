@@ -12,6 +12,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use sqlx::{Postgres, Pool, PgConnection};
 use std::sync::LazyLock;
+use bitflags::bitflags;
 use uuid::Uuid;
 use crate::error::GetDatabaseConnectionSnafu;
 
@@ -248,30 +249,51 @@ impl Render for User {
             None => buffer.push_str(&self.first_name),
         }
         buffer.push(' ');
-        buffer.push_str(&self.surname);
+        buffer.push(self.surname.chars().next().expect("surnames must not be empty"));
     }
 }
 
-pub struct FullUserNameDisplay<'a>(pub &'a User);
+bitflags! {
+    pub struct UsernameDisplay: u8 {
+        const EMAIL = 0b0000_0001;
+        const TITLE = 0b0000_0010;
+    }
+}
+
+pub struct FullUserNameDisplay<'a>(pub &'a User, pub UsernameDisplay);
 impl Render for FullUserNameDisplay<'_> {
     fn render(&self) -> Markup {
         let name_part = html! {
-            (self.0.first_name)
-            " "
             @if let Some(pref_name) = self.0.pref_name.as_ref() {
-                span class="italic" {
-                    "\""
-                    (pref_name)
-                    "\""
+                (pref_name)
+                " "
+                span class="italic text-sm" {
+                    "("
+                    (self.0.first_name)
+                    ")"
                 }
                 " "
+            } @else {
+                (self.0.first_name)
             }
+            " "
             (self.0.surname)
+        };
+        
+        let name_part = if self.1.contains(UsernameDisplay::TITLE) {
+            title(name_part)
+        } else {
+            name_part
+        };
+        let email_part = if self.1.contains(UsernameDisplay::EMAIL) {
+            html!{a href={"mailto:" (self.0.email)} target="_blank" class="text-blue-200 underline" {(self.0.email)}}
+        } else {
+            Markup::default()
         };
 
         html! {
-            (title(name_part))
-            a href={"mailto:" (self.0.email)} target="_blank" class="text-blue-200 underline" {(self.0.email)}
+            (name_part)
+            (email_part)
         }
     }
 }

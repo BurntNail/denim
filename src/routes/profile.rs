@@ -27,6 +27,7 @@ use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
 use std::str::FromStr;
 use uuid::Uuid;
+use crate::data::user::UsernameDisplay;
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -35,7 +36,7 @@ pub async fn get_profile(
     let Some(user) = session.user.clone() else {
         return Ok(Redirect::to("/").into_response());
     };
-    let username = FullUserNameDisplay(&user).render();
+    let username = FullUserNameDisplay(&user, UsernameDisplay::all()).render();
 
     let load_user_specific = matches!(user.kind, UserKind::Student { .. });
 
@@ -345,7 +346,7 @@ async fn handle_change_result(
     match res {
         Ok(user) => {
             session.login(&user).await?;
-            let username = FullUserNameDisplay(&user);
+            let username = FullUserNameDisplay(&user, UsernameDisplay::all());
 
             Ok(html! {
                 div hx-swap-oob="innerHTML:#user_display" {
