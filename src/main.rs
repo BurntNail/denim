@@ -36,6 +36,11 @@ use axum_login::{
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use tokio::net::TcpListener;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
+
+#[macro_use]
+extern crate tracing;
 
 mod auth;
 mod config;
@@ -49,23 +54,33 @@ mod state;
 async fn main() {
     dotenvy::dotenv().expect("unable to load env vars");
 
+    tracing::subscriber::set_global_default(
+        FmtSubscriber::builder()
+            .with_env_filter(EnvFilter::from_default_env())
+            .finish()
+    )
+        .expect("unable to set tracing subscriber");
+
+    info!("`tracing` online");
+
     let options = PgPoolOptions::new().max_connections(15);
     let config = RuntimeConfiguration::new().expect("unable to create config");
     let state = DenimState::new(options, config.clone())
         .await
         .expect("unable to create state");
-
+    
     state
         .ensure_admin_exists()
         .await
-        .expect("unable to ensure admin exists");
+        .expect("unable to ensure admin user exists");
 
     let session_store = PostgresSessionStore::new(state.clone());
     let session_layer = SessionManagerLayer::new(session_store)
         .with_expiry(Expiry::OnInactivity(Duration::days(5)));
-
     let auth_backend = DenimAuthBackend::new(state.clone());
     let auth_layer = AuthManagerLayerBuilder::new(auth_backend, session_layer).build();
+
+    let trace_layer = TraceLayer::new_for_http();
 
     let app = Router::new()
         .route("/", get(get_index_route))
@@ -121,6 +136,7 @@ async fn main() {
             get(internal_get_profile_edit_password()).post(internal_post_profile_edit_password),
         )
         .layer(auth_layer)
+        .layer(trace_layer)
         .with_state(state);
 
     let server_ip = env::var("DENIM_SERVER_IP").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
@@ -128,7 +144,7 @@ async fn main() {
         .await
         .expect("unable to listen on server ip");
 
-    println!("Listening on {server_ip}");
+    info!(?server_ip, "Listening");
     axum::serve(listener, app)
         .await
         .expect("unable to serve app");

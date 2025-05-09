@@ -11,6 +11,7 @@ use axum::{
 };
 use maud::{Markup, html};
 
+#[axum::debug_handler]
 pub async fn get_events(
     State(state): State<DenimState>,
     session: DenimSession,
@@ -36,7 +37,7 @@ pub async fn get_events(
 }
 
 pub async fn internal_get_add_events_form(State(state): State<DenimState>) -> DenimResult<Markup> {
-    let staff = User::get_all_staff(state.clone()).await?;
+    let staff = User::get_all_staff(&state).await?;
 
     Ok(html! {
         (title("Add New Event Form"))
@@ -80,7 +81,7 @@ pub async fn put_new_event(
     State(state): State<DenimState>,
     Form(add_event_form): Form<<Event as DataType>::FormForAdding>,
 ) -> DenimResult<Markup> {
-    let id = Event::insert_into_database(add_event_form, state.get_connection().await?).await?;
+    let id = Event::insert_into_database(add_event_form, &mut *state.get_connection().await?).await?;
 
     let all_events = internal_get_events(State(state.clone())).await?;
     let this_event =
@@ -97,7 +98,7 @@ pub async fn delete_event(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    Event::remove_from_database(id, state.get_connection().await?).await?;
+    Event::remove_from_database(id, &mut *state.get_connection().await?).await?;
 
     let all_events = internal_get_events(State(state.clone())).await?;
     let form = internal_get_add_events_form(State(state.clone())).await?;
@@ -113,7 +114,7 @@ pub async fn internal_get_event_in_detail(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    let Some(event) = Event::get_from_db_by_id(id, state.get_connection().await?).await? else {
+    let Some(event) = Event::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
         return Err(DenimError::MissingEvent { id });
     };
 
@@ -152,7 +153,7 @@ pub async fn internal_get_event_in_detail(
 }
 
 pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
-    let events = Event::get_all(state.clone()).await?;
+    let events = Event::get_all(&state).await?;
 
     Ok(render_table(
         "Events",

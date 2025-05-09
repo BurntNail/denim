@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use crate::{
     auth::{DenimSession, add_password},
     config::RuntimeConfiguration,
@@ -6,14 +7,16 @@ use crate::{
         user::{AddPersonForm, User},
     },
     error::{
-        DenimResult, GeneratePasswordSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
+        DenimResult, GeneratePasswordSnafu, MakeQuerySnafu,
         MigrateSnafu, OpenDatabaseSnafu,
     },
     maud_conveniences::render_nav,
 };
 use maud::{DOCTYPE, Markup, html};
 use snafu::{OptionExt, ResultExt};
-use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
+use sqlx::{Pool, Postgres, postgres::PgPoolOptions, Transaction};
+use sqlx::pool::PoolConnection;
+use crate::error::GetDatabaseConnectionSnafu;
 
 #[derive(Clone, Debug)]
 pub struct DenimState {
@@ -34,8 +37,10 @@ impl DenimState {
     }
 
     pub async fn ensure_admin_exists(&self) -> DenimResult<()> {
+        let mut connection = self.get_connection().await?;
+        
         if sqlx::query!("SELECT exists(SELECT 1 FROM developers)")
-            .fetch_one(&self.pool)
+            .fetch_one(&mut *connection)
             .await
             .context(MakeQuerySnafu)?
             .exists
@@ -52,13 +57,13 @@ impl DenimState {
                 surname: "Admin".to_string(),
                 email: "example.admin@den.im".to_string(),
             },
-            self.get_connection().await?,
+            &mut *connection,
         )
         .await?;
 
         //add to devs
         sqlx::query!("INSERT INTO developers (user_id) VALUES ($1)", id)
-            .execute(&self.pool)
+            .execute(&mut *connection)
             .await
             .context(MakeQuerySnafu)?;
 
@@ -72,7 +77,7 @@ impl DenimState {
         println!("Adding {password:?} for admin user \"example.admin@den.im\"");
 
         //add password
-        add_password(id, password.into(), self.get_connection().await?, true).await?;
+        add_password(id, password.into(), &mut *connection, true).await?;
 
         Ok(())
     }
@@ -106,7 +111,16 @@ impl DenimState {
             .context(GetDatabaseConnectionSnafu)
     }
 
+    #[allow(dead_code)]
     pub async fn get_transaction(&self) -> DenimResult<Transaction<Postgres>> {
         self.pool.begin().await.context(GetDatabaseConnectionSnafu)
+    }
+}
+
+impl Deref for DenimState {
+    type Target = Pool<Postgres>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pool
     }
 }

@@ -14,7 +14,7 @@ use axum_login::tower_sessions::{
 };
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use snafu::{OptionExt, ResultExt};
-use sqlx::{Executor, Postgres};
+use sqlx::PgConnection;
 
 #[derive(Debug, Clone)]
 pub struct PostgresSessionStore {
@@ -28,25 +28,27 @@ impl PostgresSessionStore {
 }
 
 impl PostgresSessionStore {
-    async fn id_exists<'e, E: Executor<'e, Database = Postgres>>(
-        e: E,
+    async fn id_exists(
         id: Id,
-    ) -> Result<bool, DenimError> {
+        conn: &mut PgConnection,
+    ) -> Result<bool, DenimError> 
+    {
         Ok(sqlx::query!(
             "SELECT EXISTS (SELECT 1 FROM sessions WHERE id = $1)",
             id.to_string()
         )
-        .fetch_one(e)
+        .fetch_one(conn)
         .await
         .context(MakeQuerySnafu)?
         .exists
         .unwrap_or(false))
     }
 
-    async fn save_session<'e, E: Executor<'e, Database = Postgres>>(
-        e: E,
+    async fn save_session(
         record: &Record,
-    ) -> Result<(), DenimError> {
+        conn: &mut PgConnection,
+    ) -> Result<(), DenimError>
+    {
         let datetime: DateTime<FixedOffset> = DateTime::from_naive_utc_and_offset(
             NaiveDateTime::new(
                 NaiveDate::from_ymd_opt(
@@ -74,7 +76,7 @@ impl PostgresSessionStore {
         let serialised_data = rmp_serde::to_vec(&record.data).context(RmpSerdeEncodeSnafu)?;
 
         sqlx::query!("INSERT INTO sessions VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = excluded.data, expiry_date = excluded.expiry_date", record.id.to_string(), serialised_data, datetime)
-            .execute(e)
+            .execute(conn)
             .await.context(MakeQuerySnafu)?;
 
         Ok(())
@@ -84,40 +86,28 @@ impl PostgresSessionStore {
 #[async_trait]
 impl SessionStore for PostgresSessionStore {
     async fn create(&self, session_record: &mut Record) -> Result<(), SSError> {
-        let mut transaction = self
-            .state
-            .get_transaction()
-            .await
-            .map_err(|e| SSError::Backend(e.to_string()))?;
-
-        while Self::id_exists(&mut *transaction, session_record.id)
+        let mut connection = self.state.get_connection().await.map_err(|e| SSError::Backend(e.to_string()))?;
+        
+        while Self::id_exists(session_record.id, &mut *connection)
             .await
             .map_err(|e| SSError::Encode(e.to_string()))?
         {
             session_record.id = Id::default();
         }
+        
+        //TODO: ensure we can't get duplicate IDs here through some sort of lock
 
-        Self::save_session(&mut *transaction, session_record)
+        Self::save_session(session_record, &mut *connection)
             .await
             .map_err(|e| SSError::Encode(e.to_string()))?;
-
-        transaction
-            .commit()
-            .await
-            .context(MakeQuerySnafu)
-            .map_err(|e| SSError::Backend(e.to_string()))?;
 
         Ok(())
     }
 
     async fn save(&self, session_record: &Record) -> Result<(), SSError> {
-        let mut conn = self
-            .state
-            .get_connection()
-            .await
-            .map_err(|e| SSError::Backend(e.to_string()))?;
+        let mut connection = self.state.get_connection().await.map_err(|e| SSError::Backend(e.to_string()))?;
 
-        Self::save_session(&mut *conn, session_record)
+        Self::save_session(session_record, &mut *connection)
             .await
             .map_err(|e| SSError::Encode(e.to_string()))?;
 
@@ -125,16 +115,13 @@ impl SessionStore for PostgresSessionStore {
     }
 
     async fn load(&self, session_id: &Id) -> Result<Option<Record>, SSError> {
-        let mut conn = self
-            .state
-            .get_connection()
-            .await
-            .map_err(|e| SSError::Backend(e.to_string()))?;
+        let mut connection = self.state.get_connection().await.map_err(|e| SSError::Backend(e.to_string()))?;
+
         let Some(sql_record) = sqlx::query!(
             "SELECT * FROM sessions WHERE id = $1",
             session_id.to_string()
         )
-        .fetch_optional(&mut *conn)
+        .fetch_optional(&mut *connection)
         .await
         .context(MakeQuerySnafu)
         .map_err(|e| SSError::Decode(e.to_string()))?
@@ -144,8 +131,8 @@ impl SessionStore for PostgresSessionStore {
 
         let id = *session_id;
         let data = rmp_serde::from_slice(&sql_record.data)
-            .map_err(|e| SSError::Decode(e.to_string()))
-            .expect("eoeoeeegghjj");
+            .map_err(|e| SSError::Decode(e.to_string()))?;
+        
         let expiry_date = OffsetDateTime::from_unix_timestamp(sql_record.expiry_date.timestamp())
             .context(InvalidChronoDateTimeSnafu {
                 utc_dt: sql_record.expiry_date,
@@ -160,14 +147,10 @@ impl SessionStore for PostgresSessionStore {
     }
 
     async fn delete(&self, session_id: &Id) -> Result<(), SSError> {
-        let mut conn = self
-            .state
-            .get_connection()
-            .await
-            .map_err(|e| SSError::Backend(e.to_string()))?;
+        let mut connection = self.state.get_connection().await.map_err(|e| SSError::Backend(e.to_string()))?;
 
         sqlx::query!("DELETE FROM sessions WHERE id = $1", session_id.to_string())
-            .execute(&mut *conn)
+            .execute(&mut *connection)
             .await
             .context(MakeQuerySnafu)
             .map_err(|e| SSError::Backend(e.to_string()))?;
@@ -179,14 +162,10 @@ impl SessionStore for PostgresSessionStore {
 #[async_trait]
 impl ExpiredDeletion for PostgresSessionStore {
     async fn delete_expired(&self) -> Result<(), SSError> {
-        let mut conn = self
-            .state
-            .get_connection()
-            .await
-            .map_err(|e| SSError::Backend(e.to_string()))?;
+        let mut connection = self.state.get_connection().await.map_err(|e| SSError::Backend(e.to_string()))?;
 
         sqlx::query!("DELETE FROM sessions WHERE expiry_date < now()")
-            .execute(&mut *conn)
+            .execute(&mut *connection)
             .await
             .context(MakeQuerySnafu)
             .map_err(|e| SSError::Backend(e.to_string()))?;

@@ -7,7 +7,7 @@ use bcrypt::hash;
 use bitflags::bitflags;
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
-use sqlx::{Postgres, pool::PoolConnection};
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 pub mod backend;
@@ -34,7 +34,7 @@ bitflags! {
 pub async fn add_password(
     id: Uuid,
     password: SecretString,
-    mut conn: PoolConnection<Postgres>,
+    conn: &mut PgConnection,
     is_default: bool,
 ) -> DenimResult<()> {
     let hashed = hash(password.expose_secret(), bcrypt::DEFAULT_COST).context(BcryptSnafu)?;

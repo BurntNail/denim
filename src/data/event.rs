@@ -1,14 +1,14 @@
 use crate::{
     data::{DataType, IdForm, user::User},
     error::{DenimResult, MakeQuerySnafu, ParseTimeSnafu, ParseUuidSnafu},
-    state::DenimState,
 };
 use chrono::NaiveDateTime;
 use futures::StreamExt;
 use serde::Deserialize;
 use snafu::ResultExt;
-use sqlx::{Postgres, pool::PoolConnection};
+use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
+use crate::error::GetDatabaseConnectionSnafu;
 
 #[derive(Debug)]
 pub struct Event {
@@ -36,9 +36,9 @@ impl DataType for Event {
 
     async fn get_from_db_by_id(
         id: Self::Id,
-        mut conn: PoolConnection<Postgres>,
+        conn: &mut PgConnection,
     ) -> DenimResult<Option<Self>> {
-        let Some(most_bits) = sqlx::query!("SELECT * FROM events WHERE id = $1", id)
+        let Some(most_bits) = sqlx::query!("SELECT * FROM public.events WHERE id = $1", id)
             .fetch_optional(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
@@ -46,7 +46,7 @@ impl DataType for Event {
             return Ok(None);
         };
         let associated_staff_member = match most_bits.associated_staff_member {
-            Some(id) => User::get_from_db_by_id(id, conn).await?,
+            Some(id) => User::get_from_db_by_id(id, &mut *conn).await?,
             None => None,
         };
 
@@ -60,26 +60,18 @@ impl DataType for Event {
         }))
     }
 
-    async fn get_all(state: DenimState) -> DenimResult<Vec<Self>> {
-        let mut start_connection = state.get_connection().await?;
-        let mut ids = sqlx::query!("SELECT id FROM events").fetch(&mut *start_connection);
-        let mut all = vec![];
-
-        while let Some(next_id) = ids.next().await {
-            let next_id = next_id.context(MakeQuerySnafu)?.id;
-            if let Some(next_event) =
-                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
-            {
-                all.push(next_event);
-            }
-        }
-
-        Ok(all)
+    async fn get_all(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>>
+    {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        
+        let ids = sqlx::query!("SELECT id FROM public.events").fetch(&mut *first_conn).map(|result| result.map(|record| record.id)).boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
     }
 
     async fn insert_into_database(
         to_be_added: Self::FormForAdding,
-        mut conn: PoolConnection<Postgres>,
+        conn: &mut PgConnection,
     ) -> DenimResult<Self::Id> {
         let AddEventForm {
             name,
@@ -113,15 +105,15 @@ impl DataType for Event {
         };
 
         //gets weird when i try to use query_as, idk
-        Ok(sqlx::query!("INSERT INTO events (name, date, location, extra_info, associated_staff_member) VALUES ($1, $2, $3, $4, $5) RETURNING id", name, date, location, extra_info, associated_staff_member).fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id)
+        Ok(sqlx::query!("INSERT INTO public.events (name, date, location, extra_info, associated_staff_member) VALUES ($1, $2, $3, $4, $5) RETURNING id", name, date, location, extra_info, associated_staff_member).fetch_one(conn).await.context(MakeQuerySnafu)?.id)
     }
 
     async fn remove_from_database(
         id: Self::Id,
-        mut conn: PoolConnection<Postgres>,
+        conn: &mut PgConnection,
     ) -> DenimResult<()> {
-        sqlx::query!("DELETE FROM events WHERE id = $1", id)
-            .execute(&mut *conn)
+        sqlx::query!("DELETE FROM public.events WHERE id = $1", id)
+            .execute(conn)
             .await
             .context(MakeQuerySnafu)?;
         Ok(())

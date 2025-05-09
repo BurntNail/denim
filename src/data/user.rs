@@ -3,7 +3,6 @@ use crate::{
     data::{DataType, IdForm},
     error::{DenimError, DenimResult, MakeQuerySnafu},
     maud_conveniences::title,
-    state::DenimState,
 };
 use axum_login::AuthUser;
 use futures::StreamExt;
@@ -11,9 +10,10 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use sqlx::{Postgres, pool::PoolConnection};
+use sqlx::{Postgres, Pool, PgConnection};
 use std::sync::LazyLock;
 use uuid::Uuid;
+use crate::error::GetDatabaseConnectionSnafu;
 
 #[derive(Debug, Clone)]
 pub struct FormGroup {
@@ -70,9 +70,10 @@ impl DataType for User {
 
     async fn get_from_db_by_id(
         id: Self::Id,
-        mut conn: PoolConnection<Postgres>,
-    ) -> DenimResult<Option<Self>> {
-        let Some(most_bits) = sqlx::query!("SELECT * FROM users WHERE id = $1", id)
+        conn: &mut PgConnection,
+    ) -> DenimResult<Option<Self>>
+    {
+        let Some(most_bits) = sqlx::query!("SELECT * FROM public.users WHERE id = $1", id)
             .fetch_optional(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
@@ -80,28 +81,28 @@ impl DataType for User {
             return Ok(None);
         };
 
-        let user_kind = if sqlx::query!("SELECT * FROM developers WHERE user_id = $1", id)
+        let user_kind = if sqlx::query!("SELECT * FROM public.developers WHERE user_id = $1", id)
             .fetch_optional(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
             .is_some()
         {
             UserKind::Developer
-        } else if sqlx::query!("SELECT * FROM staff WHERE user_id = $1", id)
+        } else if sqlx::query!("SELECT * FROM public.staff WHERE user_id = $1", id)
             .fetch_optional(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
             .is_some()
         {
             UserKind::Staff
-        } else if let Some(record) = sqlx::query!("SELECT * FROM students WHERE user_id = $1", id)
+        } else if let Some(record) = sqlx::query!("SELECT * FROM public.students WHERE user_id = $1", id)
             .fetch_optional(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
         {
             let form = sqlx::query_as!(
                 FormGroup,
-                "SELECT * FROM forms WHERE id = $1",
+                "SELECT * FROM public.forms WHERE id = $1",
                 record.form_id
             )
             .fetch_one(&mut *conn)
@@ -109,14 +110,14 @@ impl DataType for User {
             .context(MakeQuerySnafu)?;
             let house = sqlx::query_as!(
                 HouseGroup,
-                "SELECT * FROM houses WHERE id = $1",
+                "SELECT * FROM public.houses WHERE id = $1",
                 record.house_id
             )
             .fetch_one(&mut *conn)
             .await
             .context(MakeQuerySnafu)?;
             let events_participated = sqlx::query!(
-                "SELECT event_id FROM participation WHERE student_id = $1",
+                "SELECT event_id FROM public.participation WHERE student_id = $1",
                 id
             )
             .fetch_all(&mut *conn)
@@ -148,27 +149,20 @@ impl DataType for User {
         }))
     }
 
-    async fn get_all(state: DenimState) -> DenimResult<Vec<Self>> {
-        let mut start_connection = state.get_connection().await?;
-        let mut ids = sqlx::query!("SELECT id FROM users").fetch(&mut *start_connection);
-        let mut all = vec![];
+    async fn get_all(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        while let Some(next_id) = ids.next().await {
-            let next_id = next_id.context(MakeQuerySnafu)?.id;
-            if let Some(next_user) =
-                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
-            {
-                all.push(next_user);
-            }
-        }
 
-        Ok(all)
+        let ids = sqlx::query!("SELECT id FROM public.users").fetch(&mut *first_conn).map(|result| result.map(|record| record.id)).boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
     }
 
     async fn insert_into_database(
         to_be_added: Self::FormForAdding,
-        mut conn: PoolConnection<Postgres>,
-    ) -> DenimResult<Self::Id> {
+        conn: &mut PgConnection,
+    ) -> DenimResult<Self::Id>
+    {
         let AddPersonForm {
             first_name,
             pref_name,
@@ -181,15 +175,16 @@ impl DataType for User {
         } else {
             Some(pref_name)
         };
-        Ok(sqlx::query!("INSERT INTO users (first_name, pref_name, surname, email) VALUES ($1, $2, $3, $4) RETURNING id", first_name, pref_name, surname, email).fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id)
+        Ok(sqlx::query!("INSERT INTO public.users (first_name, pref_name, surname, email) VALUES ($1, $2, $3, $4) RETURNING id", first_name, pref_name, surname, email).fetch_one(conn).await.context(MakeQuerySnafu)?.id)
     }
 
     async fn remove_from_database(
         id: Self::Id,
-        mut conn: PoolConnection<Postgres>,
-    ) -> DenimResult<()> {
-        sqlx::query!("DELETE FROM users WHERE id = $1", id)
-            .execute(&mut *conn)
+        conn: &mut PgConnection,
+    ) -> DenimResult<()>
+    {
+        sqlx::query!("DELETE FROM public.users WHERE id = $1", id)
+            .execute(conn)
             .await
             .context(MakeQuerySnafu)?;
         Ok(())
@@ -218,55 +213,31 @@ impl User {
         }
     }
 
-    pub async fn get_all_staff(state: DenimState) -> DenimResult<Vec<Self>> {
-        let mut start_connection = state.get_connection().await?;
-        let mut ids = sqlx::query!("SELECT user_id FROM staff").fetch(&mut *start_connection);
-        let mut all = vec![];
+    pub async fn get_all_staff(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>>
+    {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        while let Some(next_id) = ids.next().await {
-            let next_id = next_id.context(MakeQuerySnafu)?.user_id;
-            if let Some(next_user) =
-                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
-            {
-                all.push(next_user);
-            }
-        }
 
-        Ok(all)
+        let ids = sqlx::query!("SELECT user_id FROM public.staff").fetch(&mut *first_conn).map(|result| result.map(|record| record.user_id)).boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
     }
 
-    pub async fn get_all_students(state: DenimState) -> DenimResult<Vec<Self>> {
-        let mut start_connection = state.get_connection().await?;
-        let mut ids = sqlx::query!("SELECT user_id FROM students").fetch(&mut *start_connection);
-        let mut all = vec![];
+    pub async fn get_all_students(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        while let Some(next_id) = ids.next().await {
-            let next_id = next_id.context(MakeQuerySnafu)?.user_id;
-            if let Some(next_user) =
-                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
-            {
-                all.push(next_user);
-            }
-        }
-
-        Ok(all)
+        let ids = sqlx::query!("SELECT user_id FROM public.students").fetch(&mut *first_conn).map(|result| result.map(|record| record.user_id)).boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
     }
 
-    pub async fn get_all_developers(state: DenimState) -> DenimResult<Vec<Self>> {
-        let mut start_connection = state.get_connection().await?;
-        let mut ids = sqlx::query!("SELECT user_id FROM developers").fetch(&mut *start_connection);
-        let mut all = vec![];
+    pub async fn get_all_developers(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>>
+    {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        while let Some(next_id) = ids.next().await {
-            let next_id = next_id.context(MakeQuerySnafu)?.user_id;
-            if let Some(next_user) =
-                Self::get_from_db_by_id(next_id, state.get_connection().await?).await?
-            {
-                all.push(next_user);
-            }
-        }
-
-        Ok(all)
+        let ids = sqlx::query!("SELECT user_id FROM public.developers").fetch(&mut *first_conn).map(|result| result.map(|record| record.user_id)).boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
     }
 }
 

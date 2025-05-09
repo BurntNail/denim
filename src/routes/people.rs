@@ -14,6 +14,7 @@ use axum::{
 };
 use maud::{Markup, html};
 
+#[axum::debug_handler]
 pub async fn get_people(
     State(state): State<DenimState>,
     session: DenimSession,
@@ -72,7 +73,7 @@ pub async fn put_new_person(
     State(state): State<DenimState>,
     Form(add_person_form): Form<<User as DataType>::FormForAdding>,
 ) -> DenimResult<Markup> {
-    let id = User::insert_into_database(add_person_form, state.get_connection().await?).await?;
+    let id = User::insert_into_database(add_person_form, &mut *state.get_connection().await?).await?;
     let all_people = internal_get_people(State(state.clone())).await?;
     let this_person =
         internal_get_person_in_detail(State(state.clone()), Query(IdForm { id })).await?;
@@ -88,7 +89,7 @@ pub async fn delete_person(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    User::remove_from_database(id, state.get_connection().await?).await?;
+    User::remove_from_database(id, &mut *state.get_connection().await?).await?;
 
     let all_people = internal_get_people(State(state.clone())).await?;
     let form = internal_get_add_people_form();
@@ -101,9 +102,9 @@ pub async fn delete_person(
 }
 
 pub async fn internal_get_people(State(state): State<DenimState>) -> DenimResult<Markup> {
-    let staff = User::get_all_staff(state.clone()).await?;
-    let developers = User::get_all_developers(state.clone()).await?;
-    let students = User::get_all_students(state.clone()).await?;
+    let staff = User::get_all_staff(&state).await?;
+    let developers = User::get_all_developers(&state).await?;
+    let students = User::get_all_students(&state).await?;
 
     Ok(html! {
         div class="container mx-auto flex flex-col space-y-8" {
@@ -145,7 +146,7 @@ pub async fn internal_get_person_in_detail(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    let Some(person) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+    let Some(person) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
         return Err(DenimError::MissingUser { id });
     };
 

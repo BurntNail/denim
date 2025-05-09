@@ -99,7 +99,7 @@ pub async fn internal_get_profile_student_display(
 
     let mut event_details = Vec::with_capacity(events_participated.len());
     for event in events_participated {
-        if let Some(event) = Event::get_from_db_by_id(event, state.get_connection().await?).await? {
+        if let Some(event) = Event::get_from_db_by_id(event, &mut *state.get_connection().await?).await? {
             event_details.push([
                 //TODO: link to event
                 html! {
@@ -369,16 +369,16 @@ pub async fn internal_post_profile_edit_password(
 ) -> DenimResult<Markup> {
     async fn change_password(
         PasswordForm {
-            current: current_password,
-            new: new_password,
-            confirmed: confirm_password,
+            current,
+            new,
+            confirmed,
         }: PasswordForm,
         state: DenimState,
         id: Uuid,
         hash: Option<SecretString>,
     ) -> Result<User, ValidationResult> {
         let mut errors = ValidationError::empty();
-        if new_password.expose_secret() == current_password.expose_secret() {
+        if new.expose_secret() == current.expose_secret() {
             errors |= ValidationError::SAME_AS_BEFORE;
         }
 
@@ -386,7 +386,7 @@ pub async fn internal_post_profile_edit_password(
             if let Some(bcrypt_hashed_password) = hash {
                 tokio::task::spawn_blocking(move || {
                     let exposed_hash = bcrypt_hashed_password.expose_secret();
-                    let exposed_current_try = current_password.expose_secret();
+                    let exposed_current_try = current.expose_secret();
 
                     verify(exposed_current_try, exposed_hash).context(BcryptSnafu)
                 })
@@ -400,10 +400,10 @@ pub async fn internal_post_profile_edit_password(
             errors |= ValidationError::CURRENT_PASSWORD_INCORRECT;
         }
 
-        if new_password.expose_secret().is_empty() {
+        if new.expose_secret().is_empty() {
             errors |= ValidationError::EMPTY;
         }
-        if new_password.expose_secret() != confirm_password.expose_secret() {
+        if new.expose_secret() != confirmed.expose_secret() {
             errors |= ValidationError::PASSWORDS_NOT_MATCH;
         }
 
@@ -411,8 +411,8 @@ pub async fn internal_post_profile_edit_password(
             return Err(ValidationResult::Invalid(errors));
         }
 
-        add_password(id, new_password, state.get_connection().await?, false).await?;
-        let Some(user) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+        add_password(id, new, &mut *state.get_connection().await?, false).await?;
+        let Some(user) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
 
@@ -447,17 +447,19 @@ pub async fn internal_post_profile_edit_first_name(
         if first_name == current {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
+        
+        let mut conn = state.get_connection().await?;
 
         sqlx::query!(
             "UPDATE users SET first_name = $1 WHERE id = $2",
             first_name,
             id
         )
-        .execute(&mut *state.get_connection().await?)
+        .execute(&mut *conn)
         .await
         .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
 
@@ -503,17 +505,19 @@ pub async fn internal_post_profile_edit_pref_name(
         if pref_name.as_deref() == current {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
+        
+        let mut conn = state.get_connection().await?;
 
         sqlx::query!(
             "UPDATE users SET pref_name = $1 WHERE id = $2",
             pref_name,
             id
         )
-        .execute(&mut *state.get_connection().await?)
+        .execute(&mut *conn)
         .await
         .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
 
@@ -556,13 +560,15 @@ pub async fn internal_post_profile_edit_surname(
         if surname == current {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
+        
+        let mut conn = state.get_connection().await?;
 
         sqlx::query!("UPDATE users SET surname = $1 WHERE id = $2", surname, id)
-            .execute(&mut *state.get_connection().await?)
+            .execute(&mut *conn)
             .await
             .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
 
@@ -616,13 +622,15 @@ pub async fn internal_post_profile_edit_email(
         if !errors.is_empty() {
             return Err(ValidationResult::Invalid(errors));
         }
+        
+        let mut conn = state.get_connection().await?;
 
         sqlx::query!("UPDATE users SET email = $1 WHERE id = $2", email, id)
-            .execute(&mut *state.get_connection().await?)
+            .execute(&mut *conn)
             .await
             .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, state.get_connection().await?).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
 
