@@ -38,6 +38,7 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use crate::routes::sse::sse_feed;
 
 #[macro_use]
 extern crate tracing;
@@ -135,6 +136,7 @@ async fn main() {
             "/internal/profile/edit_password",
             get(internal_get_profile_edit_password()).post(internal_post_profile_edit_password),
         )
+        .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)
         .layer(trace_layer)
         .with_state(state);

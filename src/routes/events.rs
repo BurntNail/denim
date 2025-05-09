@@ -10,6 +10,7 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
+use crate::routes::sse::SseEvent;
 
 #[axum::debug_handler]
 pub async fn get_events(
@@ -21,8 +22,8 @@ pub async fn get_events(
 
     Ok(state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
-            div class="container flex flex-row justify-center space-x-4" {
-                div id="all_events" {
+            div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
+                div hx-get="/internal/get_events" hx-trigger="sse:crud_event" id="all_events" {
                     (internal_events)
                 }
                 div id="in_focus" {
@@ -82,15 +83,12 @@ pub async fn put_new_event(
     Form(add_event_form): Form<<Event as DataType>::FormForAdding>,
 ) -> DenimResult<Markup> {
     let id = Event::insert_into_database(add_event_form, &mut *state.get_connection().await?).await?;
+    state.send_sse_event(SseEvent::CrudEvent);
 
-    let all_events = internal_get_events(State(state.clone())).await?;
     let this_event =
         internal_get_event_in_detail(State(state.clone()), Query(IdForm { id })).await?;
     Ok(html! {
         (this_event)
-        div hx-swap-oob="outerHTML:#all_events" id="all_events" {
-            (all_events)
-        }
     })
 }
 
@@ -99,14 +97,11 @@ pub async fn delete_event(
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
     Event::remove_from_database(id, &mut *state.get_connection().await?).await?;
+    state.send_sse_event(SseEvent::CrudEvent);
 
-    let all_events = internal_get_events(State(state.clone())).await?;
     let form = internal_get_add_events_form(State(state.clone())).await?;
     Ok(html! {
         (form)
-        div hx-swap-oob="outerHTML:#all_events" id="all_events" {
-            (all_events)
-        }
     })
 }
 
@@ -117,36 +112,38 @@ pub async fn internal_get_event_in_detail(
     let Some(event) = Event::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
         return Err(DenimError::MissingEvent { id });
     };
-
+    
     Ok(html! {
-        (title(event.name))
-        div class="p-6 mb-4" {
-            h2 class="text-lg font-semibold mb-2 text-gray-300 underline" {"Event Information"}
-            @if let Some(location) = event.location {
-                p class="text-gray-200 font-semibold" {
-                    "Location: "
-                    span class="font-medium" {(location)}
+        div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
+            (title(event.name))
+            div class="p-6 mb-4" {
+                h2 class="text-lg font-semibold mb-2 text-gray-300 underline" {"Event Information"}
+                @if let Some(location) = event.location {
+                    p class="text-gray-200 font-semibold" {
+                        "Location: "
+                        span class="font-medium" {(location)}
+                    }
                 }
-            }
-            p class="text-gray-200 font-semibold" {
-                "Time: "
-                span class="font-medium" {(event.date.format("%a %d/%m/%y @ %H:%M"))}
-            }
-            @if let Some(staff) = event.associated_staff_member {
                 p class="text-gray-200 font-semibold" {
-                    "Staff Member: "
-                    span class="font-medium" {(staff)}
+                    "Time: "
+                    span class="font-medium" {(event.date.format("%a %d/%m/%y @ %H:%M"))}
                 }
-            }
-            @if let Some(extra) = event.extra_info {
-                p class="text-gray-200 font-semibold" {
-                    "Extra Information: "
-                    span class="font-medium" {(extra)}
+                @if let Some(staff) = event.associated_staff_member {
+                    p class="text-gray-200 font-semibold" {
+                        "Staff Member: "
+                        span class="font-medium" {(staff)}
+                    }
                 }
-            }
-            br;
-            button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/events" hx-vals={"{\"id\": \"" (id) "\"}" } hx-target="#in_focus" {
-                "Delete event"
+                @if let Some(extra) = event.extra_info {
+                    p class="text-gray-200 font-semibold" {
+                        "Extra Information: "
+                        span class="font-medium" {(extra)}
+                    }
+                }
+                br;
+                button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/events" hx-vals={"{\"id\": \"" (id) "\"}" } hx-target="#in_focus" {
+                    "Delete event"
+                }
             }
         }
     })
@@ -154,7 +151,7 @@ pub async fn internal_get_event_in_detail(
 
 pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
     let events = Event::get_all(&state).await?;
-
+    
     Ok(render_table(
         "Events",
         ["Name", "Date", "Location",],

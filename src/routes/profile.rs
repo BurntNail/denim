@@ -28,6 +28,7 @@ use snafu::{OptionExt, ResultExt};
 use std::str::FromStr;
 use uuid::Uuid;
 use crate::data::user::UsernameDisplay;
+use crate::routes::sse::SseEvent;
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -463,6 +464,7 @@ pub async fn internal_post_profile_edit_first_name(
         let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
+        state.send_sse_event(SseEvent::CrudPerson);
 
         Ok(user)
     }
@@ -521,6 +523,7 @@ pub async fn internal_post_profile_edit_pref_name(
         let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
+        state.send_sse_event(SseEvent::CrudPerson);
 
         Ok(user)
     }
@@ -572,6 +575,7 @@ pub async fn internal_post_profile_edit_surname(
         let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
+        state.send_sse_event(SseEvent::CrudPerson);
 
         Ok(user)
     }
@@ -634,6 +638,7 @@ pub async fn internal_post_profile_edit_email(
         let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
+        state.send_sse_event(SseEvent::CrudPerson);
 
         Ok(user)
     }

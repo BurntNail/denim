@@ -14,6 +14,7 @@ use axum::{
 };
 use maud::{Markup, html};
 use crate::data::user::{FullUserNameDisplay, UsernameDisplay};
+use crate::routes::sse::SseEvent;
 
 #[axum::debug_handler]
 pub async fn get_people(
@@ -25,7 +26,7 @@ pub async fn get_people(
 
     Ok(state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
-            div class="container flex flex-row justify-center space-x-4" {
+            div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
                 div id="all_people" {
                     (internal_people)
                 }
@@ -75,15 +76,9 @@ pub async fn put_new_person(
     Form(add_person_form): Form<<User as DataType>::FormForAdding>,
 ) -> DenimResult<Markup> {
     let id = User::insert_into_database(add_person_form, &mut *state.get_connection().await?).await?;
-    let all_people = internal_get_people(State(state.clone())).await?;
-    let this_person =
-        internal_get_person_in_detail(State(state.clone()), Query(IdForm { id })).await?;
-    Ok(html! {
-        (this_person)
-        div hx-swap-oob="outerHTML:#all_people" id="all_people" {
-            (all_people)
-        }
-    })
+    state.send_sse_event(SseEvent::CrudPerson);
+    
+    internal_get_person_in_detail(State(state.clone()), Query(IdForm { id })).await
 }
 
 pub async fn delete_person(
@@ -91,15 +86,9 @@ pub async fn delete_person(
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
     User::remove_from_database(id, &mut *state.get_connection().await?).await?;
-
-    let all_people = internal_get_people(State(state.clone())).await?;
-    let form = internal_get_add_people_form();
-    Ok(html! {
-        (form)
-        div hx-swap-oob="outerHTML:#all_people" id="all_people" {
-            (all_people)
-        }
-    })
+    state.send_sse_event(SseEvent::CrudPerson);
+    
+    Ok(internal_get_add_people_form())
 }
 
 pub async fn internal_get_people(State(state): State<DenimState>) -> DenimResult<Markup> {
@@ -108,7 +97,7 @@ pub async fn internal_get_people(State(state): State<DenimState>) -> DenimResult
     let students = User::get_all_students(&state).await?;
 
     Ok(html! {
-        div class="container mx-auto flex flex-col space-y-8" {
+        div hx-get="/internal/get_people" hx-trigger="sse:crud_person" class="container mx-auto flex flex-col space-y-8" {
             div {
                 h1 class="text-2xl font-semibold mb-4" {"Staff"}
                 div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" {
@@ -152,7 +141,7 @@ pub async fn internal_get_person_in_detail(
     };
 
     Ok(html! {
-        div class="container mx-auto" {
+        div hx-get="/internal/get_person" hx-trigger="sse:crud_person" hx-vals={"{\"id\": \"" (id) "\"}" } class="container mx-auto" {
             div class="rounded-lg shadow-md overflow-hidden bg-gray-800 max-w-md mx-auto" {
                 div class="p-4" {
                     h1 class="text-2xl font-semibold mb-2" {(person)}

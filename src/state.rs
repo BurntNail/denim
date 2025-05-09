@@ -16,12 +16,15 @@ use maud::{DOCTYPE, Markup, html};
 use snafu::{OptionExt, ResultExt};
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions, Transaction};
 use sqlx::pool::PoolConnection;
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 use crate::error::GetDatabaseConnectionSnafu;
+use crate::routes::sse::SseEvent;
 
 #[derive(Clone, Debug)]
 pub struct DenimState {
     pool: Pool<Postgres>,
     config: RuntimeConfiguration,
+    sse_events_sender: Sender<SseEvent>
 }
 
 impl DenimState {
@@ -32,8 +35,10 @@ impl DenimState {
             .context(OpenDatabaseSnafu)?;
 
         sqlx::migrate!().run(&pool).await.context(MigrateSnafu)?;
+        
+        let (tx, _rx) = channel(1);
 
-        Ok(Self { pool, config })
+        Ok(Self { pool, config, sse_events_sender: tx })
     }
 
     pub async fn ensure_admin_exists(&self) -> DenimResult<()> {
@@ -93,10 +98,11 @@ impl DenimState {
                     meta charset="UTF-8" {}
                     meta name="viewport" content="width=device-width, initial-scale=1.0" {}
                     script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" {}
+                    script src="https://unpkg.com/htmx-ext-sse@2.2.3" integrity="sha384-Y4gc0CK6Kg+hmulDc6rZPJu0tqvk7EWlih0Oh+2OkAi1ZDlCbBDCQEE2uVk472Ky" crossorigin="anonymous" {}
                     script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" {}
                     title { "Denim?" }
                 }
-                body class="bg-gray-900 h-screen flex flex-col items-center justify-center text-white" {
+                body hx-ext="sse" class="bg-gray-900 h-screen flex flex-col items-center justify-center text-white" {
                     (nav)
                     (markup)
                 }
@@ -114,6 +120,14 @@ impl DenimState {
     #[allow(dead_code)]
     pub async fn get_transaction(&self) -> DenimResult<Transaction<Postgres>> {
         self.pool.begin().await.context(GetDatabaseConnectionSnafu)
+    }
+    
+    pub fn subscribe_to_sse_feed (&self) -> Receiver<SseEvent> {
+        self.sse_events_sender.subscribe()
+    }
+
+    pub fn send_sse_event (&self, event: SseEvent) {
+        let _ = self.sse_events_sender.send(event);
     }
 }
 
