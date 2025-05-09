@@ -50,7 +50,8 @@ impl AuthnBackend for DenimAuthBackend {
                     return Ok(None);
                 };
                 let Some(user) =
-                    User::get_from_db_by_id(id.id, &mut *self.state.get_connection().await?).await?
+                    User::get_from_db_by_id(id.id, &mut *self.state.get_connection().await?)
+                        .await?
                 else {
                     unreachable!(
                         "we got the ID from the database, so not clear how we now don't have a user any more"

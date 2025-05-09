@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use crate::{
     auth::{DenimSession, add_password},
     config::RuntimeConfiguration,
@@ -7,24 +6,23 @@ use crate::{
         user::{AddPersonForm, User},
     },
     error::{
-        DenimResult, GeneratePasswordSnafu, MakeQuerySnafu,
+        DenimResult, GeneratePasswordSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
         MigrateSnafu, OpenDatabaseSnafu,
     },
     maud_conveniences::render_nav,
+    routes::sse::SseEvent,
 };
 use maud::{DOCTYPE, Markup, html};
 use snafu::{OptionExt, ResultExt};
-use sqlx::{Pool, Postgres, postgres::PgPoolOptions, Transaction};
-use sqlx::pool::PoolConnection;
-use tokio::sync::broadcast::{channel, Receiver, Sender};
-use crate::error::GetDatabaseConnectionSnafu;
-use crate::routes::sse::SseEvent;
+use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
+use std::ops::Deref;
+use tokio::sync::broadcast::{Receiver, Sender, channel};
 
 #[derive(Clone, Debug)]
 pub struct DenimState {
     pool: Pool<Postgres>,
     config: RuntimeConfiguration,
-    sse_events_sender: Sender<SseEvent>
+    sse_events_sender: Sender<SseEvent>,
 }
 
 impl DenimState {
@@ -35,15 +33,19 @@ impl DenimState {
             .context(OpenDatabaseSnafu)?;
 
         sqlx::migrate!().run(&pool).await.context(MigrateSnafu)?;
-        
+
         let (tx, _rx) = channel(1);
 
-        Ok(Self { pool, config, sse_events_sender: tx })
+        Ok(Self {
+            pool,
+            config,
+            sse_events_sender: tx,
+        })
     }
 
     pub async fn ensure_admin_exists(&self) -> DenimResult<()> {
         let mut connection = self.get_connection().await?;
-        
+
         if sqlx::query!("SELECT exists(SELECT 1 FROM developers)")
             .fetch_one(&mut *connection)
             .await
@@ -62,7 +64,7 @@ impl DenimState {
                 surname: "Admin".to_string(),
                 email: "example.admin@den.im".to_string(),
             },
-            &mut *connection,
+            &mut connection,
         )
         .await?;
 
@@ -82,7 +84,7 @@ impl DenimState {
         println!("Adding {password:?} for admin user \"example.admin@den.im\"");
 
         //add password
-        add_password(id, password.into(), &mut *connection, true).await?;
+        add_password(id, password.into(), &mut connection, true).await?;
 
         Ok(())
     }
@@ -121,12 +123,12 @@ impl DenimState {
     pub async fn get_transaction(&self) -> DenimResult<Transaction<Postgres>> {
         self.pool.begin().await.context(GetDatabaseConnectionSnafu)
     }
-    
-    pub fn subscribe_to_sse_feed (&self) -> Receiver<SseEvent> {
+
+    pub fn subscribe_to_sse_feed(&self) -> Receiver<SseEvent> {
         self.sse_events_sender.subscribe()
     }
 
-    pub fn send_sse_event (&self, event: SseEvent) {
+    pub fn send_sse_event(&self, event: SseEvent) {
         let _ = self.sse_events_sender.send(event);
     }
 }

@@ -1,20 +1,19 @@
 use crate::{
     auth::PermissionsTarget,
     data::{DataType, IdForm},
-    error::{DenimError, DenimResult, MakeQuerySnafu},
+    error::{DenimError, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
     maud_conveniences::title,
 };
 use axum_login::AuthUser;
+use bitflags::bitflags;
 use futures::StreamExt;
 use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use sqlx::{Postgres, Pool, PgConnection};
+use sqlx::{PgConnection, Pool, Postgres};
 use std::sync::LazyLock;
-use bitflags::bitflags;
 use uuid::Uuid;
-use crate::error::GetDatabaseConnectionSnafu;
 
 #[derive(Debug, Clone)]
 pub struct FormGroup {
@@ -69,11 +68,7 @@ impl DataType for User {
     type FormForId = IdForm;
     type FormForAdding = AddPersonForm;
 
-    async fn get_from_db_by_id(
-        id: Self::Id,
-        conn: &mut PgConnection,
-    ) -> DenimResult<Option<Self>>
-    {
+    async fn get_from_db_by_id(id: Self::Id, conn: &mut PgConnection) -> DenimResult<Option<Self>> {
         let Some(most_bits) = sqlx::query!("SELECT * FROM public.users WHERE id = $1", id)
             .fetch_optional(&mut *conn)
             .await
@@ -96,10 +91,11 @@ impl DataType for User {
             .is_some()
         {
             UserKind::Staff
-        } else if let Some(record) = sqlx::query!("SELECT * FROM public.students WHERE user_id = $1", id)
-            .fetch_optional(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?
+        } else if let Some(record) =
+            sqlx::query!("SELECT * FROM public.students WHERE user_id = $1", id)
+                .fetch_optional(&mut *conn)
+                .await
+                .context(MakeQuerySnafu)?
         {
             let form = sqlx::query_as!(
                 FormGroup,
@@ -154,16 +150,17 @@ impl DataType for User {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-
-        let ids = sqlx::query!("SELECT id FROM public.users").fetch(&mut *first_conn).map(|result| result.map(|record| record.id)).boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
+        let ids = sqlx::query!("SELECT id FROM public.users")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.id))
+            .boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
     }
 
     async fn insert_into_database(
         to_be_added: Self::FormForAdding,
         conn: &mut PgConnection,
-    ) -> DenimResult<Self::Id>
-    {
+    ) -> DenimResult<Self::Id> {
         let AddPersonForm {
             first_name,
             pref_name,
@@ -179,11 +176,7 @@ impl DataType for User {
         Ok(sqlx::query!("INSERT INTO public.users (first_name, pref_name, surname, email) VALUES ($1, $2, $3, $4) RETURNING id", first_name, pref_name, surname, email).fetch_one(conn).await.context(MakeQuerySnafu)?.id)
     }
 
-    async fn remove_from_database(
-        id: Self::Id,
-        conn: &mut PgConnection,
-    ) -> DenimResult<()>
-    {
+    async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
         sqlx::query!("DELETE FROM public.users WHERE id = $1", id)
             .execute(conn)
             .await
@@ -214,31 +207,37 @@ impl User {
         }
     }
 
-    pub async fn get_all_staff(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>>
-    {
+    pub async fn get_all_staff(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-
-        let ids = sqlx::query!("SELECT user_id FROM public.staff").fetch(&mut *first_conn).map(|result| result.map(|record| record.user_id)).boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
+        let ids = sqlx::query!("SELECT user_id FROM public.staff")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.user_id))
+            .boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
     }
 
     pub async fn get_all_students(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        let ids = sqlx::query!("SELECT user_id FROM public.students").fetch(&mut *first_conn).map(|result| result.map(|record| record.user_id)).boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
+        let ids = sqlx::query!("SELECT user_id FROM public.students")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.user_id))
+            .boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
     }
 
-    pub async fn get_all_developers(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>>
-    {
+    pub async fn get_all_developers(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        let ids = sqlx::query!("SELECT user_id FROM public.developers").fetch(&mut *first_conn).map(|result| result.map(|record| record.user_id)).boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
+        let ids = sqlx::query!("SELECT user_id FROM public.developers")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.user_id))
+            .boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
     }
 }
 
@@ -249,7 +248,12 @@ impl Render for User {
             None => buffer.push_str(&self.first_name),
         }
         buffer.push(' ');
-        buffer.push(self.surname.chars().next().expect("surnames must not be empty"));
+        buffer.push(
+            self.surname
+                .chars()
+                .next()
+                .expect("surnames must not be empty"),
+        );
     }
 }
 
@@ -279,14 +283,14 @@ impl Render for FullUserNameDisplay<'_> {
             " "
             (self.0.surname)
         };
-        
+
         let name_part = if self.1.contains(UsernameDisplay::TITLE) {
             title(name_part)
         } else {
             name_part
         };
         let email_part = if self.1.contains(UsernameDisplay::EMAIL) {
-            html!{a href={"mailto:" (self.0.email)} target="_blank" class="text-blue-200 underline" {(self.0.email)}}
+            html! {a href={"mailto:" (self.0.email)} target="_blank" class="text-blue-200 underline" {(self.0.email)}}
         } else {
             Markup::default()
         };

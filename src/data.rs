@@ -1,11 +1,9 @@
-use futures::stream::BoxStream;
-use futures::StreamExt;
-use crate::{error::DenimResult};
+use crate::error::{DenimResult, MakeQuerySnafu};
+use futures::{StreamExt, stream::BoxStream};
 use serde::Deserialize;
 use snafu::ResultExt;
 use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
-use crate::error::MakeQuerySnafu;
 
 pub mod event;
 pub mod user;
@@ -25,38 +23,35 @@ pub trait DataType: Sized {
     type FormForId;
     type FormForAdding;
 
-    async fn get_from_db_by_id(
-        id: Self::Id,
-        conn: &mut PgConnection
-    ) -> DenimResult<Option<Self>>;
-    
+    async fn get_from_db_by_id(id: Self::Id, conn: &mut PgConnection) -> DenimResult<Option<Self>>;
+
     //takes in a pool rather than a connection due to probably needing multiple requests and faffery with streams
 
     async fn get_all(conn: &Pool<Postgres>) -> DenimResult<Vec<Self>>;
 
     #[allow(dead_code)]
-    async fn get_ids_from_vec(ids: Vec<Self::Id>, conn: &mut PgConnection) -> DenimResult<Vec<Self>>
-    {
+    async fn get_ids_from_vec(
+        ids: Vec<Self::Id>,
+        conn: &mut PgConnection,
+    ) -> DenimResult<Vec<Self>> {
         let mut all = Vec::with_capacity(ids.len());
         for id in ids {
-            if let Some(next_event) =
-                Self::get_from_db_by_id(id, conn).await?
-            {
+            if let Some(next_event) = Self::get_from_db_by_id(id, conn).await? {
                 all.push(next_event);
             }
         }
         Ok(all)
     }
 
-    async fn get_ids_from_fetch_stream(mut ids: BoxStream<'_, Result<Self::Id, sqlx::Error>>, conn: &mut PgConnection) -> DenimResult<Vec<Self>>
-    {
+    async fn get_ids_from_fetch_stream(
+        mut ids: BoxStream<'_, Result<Self::Id, sqlx::Error>>,
+        conn: &mut PgConnection,
+    ) -> DenimResult<Vec<Self>> {
         let mut all = vec![];
 
         while let Some(next_id) = ids.next().await {
             let next_id = next_id.context(MakeQuerySnafu)?;
-            if let Some(next_event) =
-                Self::get_from_db_by_id(next_id, conn).await?
-            {
+            if let Some(next_event) = Self::get_from_db_by_id(next_id, conn).await? {
                 all.push(next_event);
             }
         }
@@ -66,7 +61,7 @@ pub trait DataType: Sized {
 
     async fn insert_into_database(
         to_be_added: Self::FormForAdding,
-        conn: &mut PgConnection
+        conn: &mut PgConnection,
     ) -> DenimResult<Self::Id>;
 
     async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()>;

@@ -2,10 +2,11 @@ use crate::{
     auth::DenimSession,
     data::{
         DataType, IdForm,
-        user::{FormGroup, HouseGroup, User, UserKind},
+        user::{FormGroup, FullUserNameDisplay, HouseGroup, User, UserKind, UsernameDisplay},
     },
     error::{DenimError, DenimResult},
     maud_conveniences::title,
+    routes::sse::SseEvent,
     state::DenimState,
 };
 use axum::{
@@ -13,8 +14,6 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
-use crate::data::user::{FullUserNameDisplay, UsernameDisplay};
-use crate::routes::sse::SseEvent;
 
 #[axum::debug_handler]
 pub async fn get_people(
@@ -75,9 +74,10 @@ pub async fn put_new_person(
     State(state): State<DenimState>,
     Form(add_person_form): Form<<User as DataType>::FormForAdding>,
 ) -> DenimResult<Markup> {
-    let id = User::insert_into_database(add_person_form, &mut *state.get_connection().await?).await?;
+    let id =
+        User::insert_into_database(add_person_form, &mut *state.get_connection().await?).await?;
     state.send_sse_event(SseEvent::CrudPerson);
-    
+
     internal_get_person_in_detail(State(state.clone()), Query(IdForm { id })).await
 }
 
@@ -87,7 +87,7 @@ pub async fn delete_person(
 ) -> DenimResult<Markup> {
     User::remove_from_database(id, &mut *state.get_connection().await?).await?;
     state.send_sse_event(SseEvent::CrudPerson);
-    
+
     Ok(internal_get_add_people_form())
 }
 
@@ -136,7 +136,8 @@ pub async fn internal_get_person_in_detail(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    let Some(person) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
+    let Some(person) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await?
+    else {
         return Err(DenimError::MissingUser { id });
     };
 

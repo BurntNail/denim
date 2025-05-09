@@ -1,6 +1,8 @@
 use crate::{
     data::{DataType, IdForm, user::User},
-    error::{DenimResult, MakeQuerySnafu, ParseTimeSnafu, ParseUuidSnafu},
+    error::{
+        DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu, ParseTimeSnafu, ParseUuidSnafu,
+    },
 };
 use chrono::NaiveDateTime;
 use futures::StreamExt;
@@ -8,7 +10,6 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
-use crate::error::GetDatabaseConnectionSnafu;
 
 #[derive(Debug)]
 pub struct Event {
@@ -34,10 +35,7 @@ impl DataType for Event {
     type FormForId = IdForm;
     type FormForAdding = AddEventForm;
 
-    async fn get_from_db_by_id(
-        id: Self::Id,
-        conn: &mut PgConnection,
-    ) -> DenimResult<Option<Self>> {
+    async fn get_from_db_by_id(id: Self::Id, conn: &mut PgConnection) -> DenimResult<Option<Self>> {
         let Some(most_bits) = sqlx::query!("SELECT * FROM public.events WHERE id = $1", id)
             .fetch_optional(&mut *conn)
             .await
@@ -60,13 +58,15 @@ impl DataType for Event {
         }))
     }
 
-    async fn get_all(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>>
-    {
+    async fn get_all(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
-        
-        let ids = sqlx::query!("SELECT id FROM public.events").fetch(&mut *first_conn).map(|result| result.map(|record| record.id)).boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut *second_conn).await
+
+        let ids = sqlx::query!("SELECT id FROM public.events")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.id))
+            .boxed();
+        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
     }
 
     async fn insert_into_database(
@@ -108,10 +108,7 @@ impl DataType for Event {
         Ok(sqlx::query!("INSERT INTO public.events (name, date, location, extra_info, associated_staff_member) VALUES ($1, $2, $3, $4, $5) RETURNING id", name, date, location, extra_info, associated_staff_member).fetch_one(conn).await.context(MakeQuerySnafu)?.id)
     }
 
-    async fn remove_from_database(
-        id: Self::Id,
-        conn: &mut PgConnection,
-    ) -> DenimResult<()> {
+    async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
         sqlx::query!("DELETE FROM public.events WHERE id = $1", id)
             .execute(conn)
             .await

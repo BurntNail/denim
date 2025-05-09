@@ -5,10 +5,11 @@ use crate::{
     data::{
         DataType,
         event::Event,
-        user::{FullUserNameDisplay, User, UserKind},
+        user::{FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
     maud_conveniences::render_table,
+    routes::sse::SseEvent,
     state::DenimState,
 };
 use axum::{
@@ -27,8 +28,6 @@ use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
 use std::str::FromStr;
 use uuid::Uuid;
-use crate::data::user::UsernameDisplay;
-use crate::routes::sse::SseEvent;
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -101,7 +100,9 @@ pub async fn internal_get_profile_student_display(
 
     let mut event_details = Vec::with_capacity(events_participated.len());
     for event in events_participated {
-        if let Some(event) = Event::get_from_db_by_id(event, &mut *state.get_connection().await?).await? {
+        if let Some(event) =
+            Event::get_from_db_by_id(event, &mut *state.get_connection().await?).await?
+        {
             event_details.push([
                 //TODO: link to event
                 html! {
@@ -414,7 +415,8 @@ pub async fn internal_post_profile_edit_password(
         }
 
         add_password(id, new, &mut *state.get_connection().await?, false).await?;
-        let Some(user) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await?
+        else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
 
@@ -449,7 +451,7 @@ pub async fn internal_post_profile_edit_first_name(
         if first_name == current {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
-        
+
         let mut conn = state.get_connection().await?;
 
         sqlx::query!(
@@ -461,7 +463,7 @@ pub async fn internal_post_profile_edit_first_name(
         .await
         .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
         state.send_sse_event(SseEvent::CrudPerson);
@@ -508,7 +510,7 @@ pub async fn internal_post_profile_edit_pref_name(
         if pref_name.as_deref() == current {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
-        
+
         let mut conn = state.get_connection().await?;
 
         sqlx::query!(
@@ -520,7 +522,7 @@ pub async fn internal_post_profile_edit_pref_name(
         .await
         .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
         state.send_sse_event(SseEvent::CrudPerson);
@@ -564,7 +566,7 @@ pub async fn internal_post_profile_edit_surname(
         if surname == current {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
-        
+
         let mut conn = state.get_connection().await?;
 
         sqlx::query!("UPDATE users SET surname = $1 WHERE id = $2", surname, id)
@@ -572,7 +574,7 @@ pub async fn internal_post_profile_edit_surname(
             .await
             .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
         state.send_sse_event(SseEvent::CrudPerson);
@@ -627,7 +629,7 @@ pub async fn internal_post_profile_edit_email(
         if !errors.is_empty() {
             return Err(ValidationResult::Invalid(errors));
         }
-        
+
         let mut conn = state.get_connection().await?;
 
         sqlx::query!("UPDATE users SET email = $1 WHERE id = $2", email, id)
@@ -635,7 +637,7 @@ pub async fn internal_post_profile_edit_email(
             .await
             .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut *conn).await? else {
+        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
             unreachable!("already been having fun with this user")
         }; //ensure we get correct new user, in case add_password makes any changes that are important
         state.send_sse_event(SseEvent::CrudPerson);

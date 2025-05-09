@@ -3,6 +3,7 @@ use crate::{
     data::{DataType, IdForm, event::Event, user::User},
     error::{DenimError, DenimResult},
     maud_conveniences::{escape, render_table, title},
+    routes::sse::SseEvent,
     state::DenimState,
 };
 use axum::{
@@ -10,7 +11,6 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
-use crate::routes::sse::SseEvent;
 
 #[axum::debug_handler]
 pub async fn get_events(
@@ -82,7 +82,8 @@ pub async fn put_new_event(
     State(state): State<DenimState>,
     Form(add_event_form): Form<<Event as DataType>::FormForAdding>,
 ) -> DenimResult<Markup> {
-    let id = Event::insert_into_database(add_event_form, &mut *state.get_connection().await?).await?;
+    let id =
+        Event::insert_into_database(add_event_form, &mut *state.get_connection().await?).await?;
     state.send_sse_event(SseEvent::CrudEvent);
 
     let this_event =
@@ -109,10 +110,11 @@ pub async fn internal_get_event_in_detail(
     State(state): State<DenimState>,
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
-    let Some(event) = Event::get_from_db_by_id(id, &mut *state.get_connection().await?).await? else {
+    let Some(event) = Event::get_from_db_by_id(id, &mut *state.get_connection().await?).await?
+    else {
         return Err(DenimError::MissingEvent { id });
     };
-    
+
     Ok(html! {
         div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
             (title(event.name))
@@ -151,7 +153,7 @@ pub async fn internal_get_event_in_detail(
 
 pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
     let events = Event::get_all(&state).await?;
-    
+
     Ok(render_table(
         "Events",
         ["Name", "Date", "Location",],

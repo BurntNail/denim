@@ -22,6 +22,7 @@ use crate::{
             internal_post_profile_edit_first_name, internal_post_profile_edit_password,
             internal_post_profile_edit_pref_name, internal_post_profile_edit_surname,
         },
+        sse::sse_feed,
     },
     state::DenimState,
 };
@@ -38,7 +39,6 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use crate::routes::sse::sse_feed;
 
 #[macro_use]
 extern crate tracing;
@@ -58,9 +58,9 @@ async fn main() {
     tracing::subscriber::set_global_default(
         FmtSubscriber::builder()
             .with_env_filter(EnvFilter::from_default_env())
-            .finish()
+            .finish(),
     )
-        .expect("unable to set tracing subscriber");
+    .expect("unable to set tracing subscriber");
 
     info!("`tracing` online");
 
@@ -69,7 +69,7 @@ async fn main() {
     let state = DenimState::new(options, config.clone())
         .await
         .expect("unable to create state");
-    
+
     state
         .ensure_admin_exists()
         .await
