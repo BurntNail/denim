@@ -8,7 +8,7 @@ use crate::{
         user::{FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
-    maud_conveniences::render_table,
+    maud_conveniences::{render_errors_list, render_table},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -26,7 +26,6 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
-use std::str::FromStr;
 use uuid::Uuid;
 
 pub async fn get_profile(
@@ -159,9 +158,7 @@ fn get_edit_password_form(errors: ValidationError) -> Markup {
         }
 
         @if !errors.is_empty() {
-            div class="p-4" {
-                (errors)
-            }
+            (render_errors_list(errors.as_nice_list()))
         }
 
         form hx-post="/internal/profile/edit_password" hx-trigger="submit" class="p-4" hx-target="#form_contents" {
@@ -204,9 +201,7 @@ fn get_form(
         }
 
         @if !errors.is_empty() {
-            div class="p-4" {
-                (errors)
-            }
+            (render_errors_list(errors.as_nice_list()))
         }
 
         form hx-post=(action) hx-trigger="submit" hx-target="#form_contents" class="p-4" {
@@ -306,21 +301,6 @@ impl ValidationError {
             Self::SAME_AS_BEFORE => Some("Field was the same as before"),
             _ => None,
         })
-    }
-}
-
-impl Render for ValidationError {
-    fn render(&self) -> Markup {
-        html! {
-            div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
-                strong class="font-bold" {"Errors:"}
-                ul class="list-disc pl-5" {
-                    @for error in self.as_nice_list() {
-                        li {(error)}
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -617,8 +597,7 @@ pub async fn internal_post_profile_edit_email(
         }
         let mut errors = ValidationError::empty();
 
-        if let Err(e) = EmailAddress::from_str(&email) {
-            eprintln!("Error parsing email - maybe do something with this?: {e}");
+        if !EmailAddress::is_valid(&email) {
             errors |= ValidationError::INVALID_EMAIL;
         }
         if email == current {

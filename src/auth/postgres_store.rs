@@ -30,7 +30,7 @@ impl PostgresSessionStore {
 impl PostgresSessionStore {
     async fn id_exists(id: Id, conn: &mut PgConnection) -> Result<bool, DenimError> {
         Ok(sqlx::query!(
-            "SELECT EXISTS (SELECT 1 FROM sessions WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM public.sessions WHERE id = $1)",
             id.to_string()
         )
         .fetch_one(conn)
@@ -122,7 +122,7 @@ impl SessionStore for PostgresSessionStore {
             .map_err(|e| SSError::Backend(e.to_string()))?;
 
         let Some(sql_record) = sqlx::query!(
-            "SELECT * FROM sessions WHERE id = $1",
+            "SELECT * FROM public.sessions WHERE id = $1",
             session_id.to_string()
         )
         .fetch_optional(&mut *connection)
@@ -157,11 +157,14 @@ impl SessionStore for PostgresSessionStore {
             .await
             .map_err(|e| SSError::Backend(e.to_string()))?;
 
-        sqlx::query!("DELETE FROM sessions WHERE id = $1", session_id.to_string())
-            .execute(&mut *connection)
-            .await
-            .context(MakeQuerySnafu)
-            .map_err(|e| SSError::Backend(e.to_string()))?;
+        sqlx::query!(
+            "DELETE FROM public.sessions WHERE id = $1",
+            session_id.to_string()
+        )
+        .execute(&mut *connection)
+        .await
+        .context(MakeQuerySnafu)
+        .map_err(|e| SSError::Backend(e.to_string()))?;
 
         Ok(())
     }
@@ -176,7 +179,7 @@ impl ExpiredDeletion for PostgresSessionStore {
             .await
             .map_err(|e| SSError::Backend(e.to_string()))?;
 
-        sqlx::query!("DELETE FROM sessions WHERE expiry_date < now()")
+        sqlx::query!("DELETE FROM public.sessions WHERE expiry_date < now()")
             .execute(&mut *connection)
             .await
             .context(MakeQuerySnafu)

@@ -1,16 +1,19 @@
 use crate::{
     auth::{DenimSession, backend::DenimAuthCredentials},
-    error::DenimResult,
+    error::{DenimResult, MakeQuerySnafu},
     state::DenimState,
 };
 use axum::{
     Form,
+    body::Body,
     extract::{Query, State},
+    http::Response,
     response::{IntoResponse, Redirect},
 };
-use maud::{Markup, html};
+use maud::html;
 use secrecy::SecretString;
 use serde::Deserialize;
+use snafu::ResultExt;
 
 #[derive(Deserialize)]
 pub struct LoginOptions {
@@ -22,7 +25,17 @@ pub async fn get_login(
     State(state): State<DenimState>,
     session: DenimSession,
     Query(LoginOptions { to, login_failed }): Query<LoginOptions>,
-) -> DenimResult<Markup> {
+) -> DenimResult<Response<Body>> {
+    if !sqlx::query!("SELECT exists(SELECT 1 FROM public.users)")
+        .fetch_one(&mut *state.get_connection().await?)
+        .await
+        .context(MakeQuerySnafu)?
+        .exists
+        .unwrap_or(false)
+    {
+        return Ok(Redirect::to("/onboarding/create_admin_acc").into_response());
+    }
+
     let is_logged_in = session.user.is_some();
     let login_failed = login_failed.unwrap_or(false);
 
@@ -68,7 +81,7 @@ pub async fn get_login(
                 }
             }
         }
-    }))
+    }).into_response())
 }
 
 #[derive(Deserialize)]

@@ -73,3 +73,16 @@ pub fn title(s: impl Render) -> Markup {
         h1 class="text-2xl font-semibold mb-4" {(s)}
     }
 }
+
+pub fn render_errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
+    html! {
+        div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
+            strong class="font-bold" {"Errors:"}
+            ul class="list-disc pl-5" {
+                @for error in list {
+                    li {(error)}
+                }
+            }
+        }
+    }
+}

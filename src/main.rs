@@ -10,6 +10,7 @@ use crate::{
         },
         index::get_index_route,
         login::{get_login, post_login, post_logout},
+        new_admin_flow::{get_create_new_admin, post_add_new_admin},
         people::{
             delete_person, get_people, internal_get_add_people_form, internal_get_people,
             internal_get_person_in_detail, put_new_person,
@@ -71,11 +72,6 @@ async fn main() {
         .await
         .expect("unable to create state");
 
-    state
-        .ensure_admin_exists()
-        .await
-        .expect("unable to ensure admin user exists");
-
     let session_store = PostgresSessionStore::new(state.clone());
     let session_layer = SessionManagerLayer::new(session_store)
         .with_expiry(Expiry::OnInactivity(Duration::days(5)));
@@ -100,6 +96,10 @@ async fn main() {
         .route(
             "/replace_default_password",
             get(get_replace_default_password).post(post_replace_default_password),
+        )
+        .route(
+            "/onboarding/create_admin_acc",
+            get(get_create_new_admin).post(post_add_new_admin),
         )
         .route("/internal/get_people", get(internal_get_people))
         .route("/internal/get_events", get(internal_get_events))

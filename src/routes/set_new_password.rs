@@ -2,6 +2,7 @@ use crate::{
     auth::{DenimSession, add_password},
     data::{DataType, user::User},
     error::{BcryptSnafu, DenimResult},
+    maud_conveniences::render_errors_list,
     state::DenimState,
 };
 use axum::{
@@ -55,28 +56,21 @@ pub async fn get_replace_default_password(
     if session
         .user
         .as_ref()
-        .map_or(true, |user| !user.current_password_is_default)
+        .is_none_or(|user| !user.current_password_is_default)
     {
         return Redirect::to("/").into_response();
     }
 
-    let validation_errors = match validation_errors {
-        None => ReplaceDefaultPasswordValidationError::empty(),
-        Some(n) => ReplaceDefaultPasswordValidationError::from_bits_truncate(n),
-    };
+    let validation_errors = validation_errors.map_or_else(
+        ReplaceDefaultPasswordValidationError::empty,
+        ReplaceDefaultPasswordValidationError::from_bits_truncate,
+    );
 
     state.render(session, html!{
         div class="bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-full max-w-md" {
             h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {"Replace Default Password"}
             @if !validation_errors.is_empty() {
-                div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
-                    strong class="font-bold" {"Errors:"}
-                    ul class="list-disc pl-5" {
-                        @for error in validation_errors.as_nice_list() {
-                            li {(error)}
-                        }
-                    }
-                }
+                (render_errors_list(validation_errors.as_nice_list()))
             }
             form method="post" {
                 input type="hidden" id="next" name="next" value={(next)};

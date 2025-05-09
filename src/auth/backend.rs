@@ -42,7 +42,7 @@ impl AuthnBackend for DenimAuthBackend {
 
         match creds {
             DenimAuthCredentials::EmailPassword { email, password } => {
-                let Some(id) = sqlx::query!("SELECT id FROM users WHERE email = $1", email)
+                let Some(id) = sqlx::query!("SELECT id FROM public.users WHERE email = $1", email)
                     .fetch_optional(&mut *conn)
                     .await
                     .context(MakeQuerySnafu)?

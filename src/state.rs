@@ -1,19 +1,12 @@
 use crate::{
-    auth::{DenimSession, add_password},
+    auth::DenimSession,
     config::RuntimeConfiguration,
-    data::{
-        DataType,
-        user::{AddPersonForm, User},
-    },
-    error::{
-        DenimResult, GeneratePasswordSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
-        MigrateSnafu, OpenDatabaseSnafu,
-    },
+    error::{DenimResult, GetDatabaseConnectionSnafu, MigrateSnafu, OpenDatabaseSnafu},
     maud_conveniences::render_nav,
     routes::sse::SseEvent,
 };
 use maud::{DOCTYPE, Markup, html};
-use snafu::{OptionExt, ResultExt};
+use snafu::ResultExt;
 use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
 use std::ops::Deref;
 use tokio::sync::broadcast::{Receiver, Sender, channel};
@@ -41,52 +34,6 @@ impl DenimState {
             config,
             sse_events_sender: tx,
         })
-    }
-
-    pub async fn ensure_admin_exists(&self) -> DenimResult<()> {
-        let mut connection = self.get_connection().await?;
-
-        if sqlx::query!("SELECT exists(SELECT 1 FROM developers)")
-            .fetch_one(&mut *connection)
-            .await
-            .context(MakeQuerySnafu)?
-            .exists
-            .unwrap_or(false)
-        {
-            return Ok(());
-        }
-
-        //generate user
-        let id = User::insert_into_database(
-            AddPersonForm {
-                first_name: "Example".to_string(),
-                pref_name: String::new(),
-                surname: "Admin".to_string(),
-                email: "example.admin@den.im".to_string(),
-            },
-            &mut connection,
-        )
-        .await?;
-
-        //add to devs
-        sqlx::query!("INSERT INTO developers (user_id) VALUES ($1)", id)
-            .execute(&mut *connection)
-            .await
-            .context(MakeQuerySnafu)?;
-
-        //generate password
-        let password = self
-            .config
-            .auth_config()
-            .generate()
-            .context(GeneratePasswordSnafu)?;
-
-        println!("Adding {password:?} for admin user \"example.admin@den.im\"");
-
-        //add password
-        add_password(id, password.into(), &mut connection, true).await?;
-
-        Ok(())
     }
 
     #[allow(clippy::unused_self, clippy::needless_pass_by_value)] //in case self is ever needed :), and to allow direct html! usage
