@@ -16,25 +16,18 @@ use maud::{Markup, html};
 pub async fn get_events(
     State(state): State<DenimState>,
     session: DenimSession,
-) -> DenimResult<Markup> {
-    let internal_events = internal_get_events(State(state.clone())).await?;
-    let internal_form = internal_get_add_events_form(State(state.clone())).await?;
-
-    Ok(state.render(session, html!{
+) -> Markup {
+    state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
             div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
-                div hx-get="/internal/get_events" hx-trigger="sse:crud_event" id="all_events" {
-                    (internal_events)
-                }
-                div id="in_focus" {
-                    (internal_form)
-                }
+                div hx-get="/internal/get_events" hx-trigger="sse:crud_event,load" id="all_events" {}
+                div id="in_focus" hx-get="/internal/get_events_form" hx-trigger="load" {}
             }
             button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/get_events_form" hx-target="#in_focus" {
                 "Add new Event"
             }
         }
-    }))
+    })
 }
 
 pub async fn internal_get_add_events_form(State(state): State<DenimState>) -> DenimResult<Markup> {
