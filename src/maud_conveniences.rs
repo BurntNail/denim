@@ -45,7 +45,7 @@ pub fn render_nav(logged_in_user: Option<User>) -> Markup {
                     a href="/" class="text-gray-300 bg-fuchsia-900 hover:bg-fuchsia-700 px-3 py-2 rounded-md text-md font-bold" {"Denim"}
                     @match logged_in_user {
                         Some(logged_in_user) => {
-                            div class="flex flex-col space-y-2 text-center" {
+                            div class="flex flex-col space-y-2 text-center items-center justify-between" {
                                 a href="/profile" id="nav_username" class="text-gray-300 bg-green-900 hover:bg-green-700 px-3 py-2 rounded-md text-sm font-medium" {(logged_in_user)}
                                 form method="post" action="/logout" {
                                     input type="submit" value="Logout" class="text-gray-300 bg-red-900 hover:bg-red-700 px-3 py-2 rounded-md text-sm font-medium" {}

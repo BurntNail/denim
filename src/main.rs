@@ -22,6 +22,7 @@ use crate::{
             internal_post_profile_edit_first_name, internal_post_profile_edit_password,
             internal_post_profile_edit_pref_name, internal_post_profile_edit_surname,
         },
+        set_new_password::{get_replace_default_password, post_replace_default_password},
         sse::sse_feed,
     },
     state::DenimState,
@@ -96,6 +97,10 @@ async fn main() {
         .route("/profile", get(get_profile))
         .route("/login", get(get_login).post(post_login))
         .route("/logout", post(post_logout))
+        .route(
+            "/replace_default_password",
+            get(get_replace_default_password).post(post_replace_default_password),
+        )
         .route("/internal/get_people", get(internal_get_people))
         .route("/internal/get_events", get(internal_get_events))
         .route("/internal/get_person", get(internal_get_person_in_detail))

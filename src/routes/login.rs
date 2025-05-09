@@ -38,11 +38,13 @@ pub async fn get_login(
             }
 
             @if is_logged_in {
-                h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
-                    "Already logged in!"
-                }
-                form method="post" action="/logout" {
-                    input type="submit" value="Logout?" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
+                div class="flex flex-col items-center justify-between" {
+                    h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
+                        "Already logged in!"
+                    }
+                    form method="post" action="/logout" {
+                        input type="submit" value="Logout?" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
+                    }
                 }
             } @else {
                 h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
@@ -91,13 +93,16 @@ pub async fn post_login(
         Err(e) => Err(e.into()),
         Ok(Some(user)) => match session.login(&user).await {
             Ok(()) => {
-                let next = next.as_deref().unwrap_or("/");
-                Ok(Redirect::to(next))
+                let next = next.as_deref().unwrap_or("");
+                Ok(if user.current_password_is_default {
+                    Redirect::to(&format!("/replace_default_password?next={next}"))
+                } else {
+                    Redirect::to(next)
+                })
             }
             Err(e) => Err(e.into()),
         },
         Ok(None) => {
-            //TODO: if default password, send to change default password page :)
             let mut redirect = "/login?login_failed=true".to_string();
             if let Some(next) = next {
                 redirect += format!("&to={next}").as_str();

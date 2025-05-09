@@ -86,7 +86,7 @@ impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
 
 impl IntoResponse for DenimError {
     fn into_response(self) -> Response {
-        eprintln!("ERROR! {self:?}");
+        error!(?self, "Error!");
         (StatusCode::INTERNAL_SERVER_ERROR, Html("whoopsies sorry")).into_response()
     }
 }
