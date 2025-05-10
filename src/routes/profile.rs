@@ -8,7 +8,7 @@ use crate::{
         user::{FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
-    maud_conveniences::{render_errors_list, render_table},
+    maud_conveniences::{errors_list, table},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -27,6 +27,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
+use crate::maud_conveniences::{form_submit_button, simple_form_element, title};
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -115,11 +116,11 @@ pub async fn internal_get_profile_student_display(
     }
 
     let form_house_display = internal_get_profile_student_form_house_display(session).await?;
-    let events_table = render_table("Events", ["Event", "Date"], event_details);
+    let events_table = table("Events", ["Event", "Date"], event_details);
 
     Ok(html! {
         div class="mb-4 flex flex-col items-center justify-between space-x-4 container mx-auto bg-gray-800 rounded-md p-4 rounded-lg" {
-            h2 class="text-lg font-semibold mb-2 text-gray-300 underline" {"Student Information"}
+            (title("Student Information"))
             (form_house_display)
             br;
             (events_table)
@@ -153,30 +154,18 @@ pub async fn internal_get_profile_student_form_house_display(
 
 fn get_edit_password_form(errors: ValidationError) -> Markup {
     html! {
-        h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
-            "Change Password"
-        }
+        (title("Change Password"))
 
         @if !errors.is_empty() {
-            (render_errors_list(errors.as_nice_list()))
+            (errors_list(errors.as_nice_list()))
         }
 
         form hx-post="/internal/profile/edit_password" hx-trigger="submit" class="p-4" hx-target="#form_contents" {
-            div class="mb-4" {
-                label for="current_password" class="block text-sm font-bold mb-2 text-gray-300" {"Current Password"}
-                input required id="current_password" name="current_password" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
-            }
-            div class="mb-4" {
-                label for="new_password" class="block text-sm font-bold mb-2 text-gray-300" {"New Password"}
-                input required id="new_password" name="new_password" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
-            }
-            div class="mb-4" {
-                label for="confirm_password" class="block text-sm font-bold mb-2 text-gray-300" {"Confirm Password"}
-                input required id="confirm_password" name="confirm_password" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
-            }
-            div class="flex items-center justify-between" {
-                button type="submit" class="bg-blue-500 hover:bg-blue-700 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {"Submit"}
-            }
+            (simple_form_element("current", "Current Password", true, Some("password"), None))
+            (simple_form_element("new", "New Password", true, Some("password"), None))
+            (simple_form_element("confirmed", "Confirm New Password", true, Some("password"), None))
+            
+            (form_submit_button(Some("Change Password")))
         }
     }
 }
@@ -185,34 +174,24 @@ pub fn internal_get_profile_edit_password() -> Markup {
     get_edit_password_form(ValidationError::empty())
 }
 
-fn get_form(
+fn get_one_item_form(
     action: &'static str,
-    title: &'static str,
-    current: impl Render,
+    form_title: &'static str,
+    current: &str,
     label: impl Render,
     input_type: Option<&'static str>,
     errors: ValidationError,
 ) -> Markup {
-    let input_type = input_type.unwrap_or("text");
-
     html! {
-        h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
-            (title)
-        }
+        (title(form_title))
 
         @if !errors.is_empty() {
-            (render_errors_list(errors.as_nice_list()))
+            (errors_list(errors.as_nice_list()))
         }
 
         form hx-post=(action) hx-trigger="submit" hx-target="#form_contents" class="p-4" {
-            div class="mb-4" {
-                label for="item" class="block text-sm font-bold mb-2 text-gray-300" {(label)}
-                input id="item" name="item" type=(input_type) value=(current) class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
-            }
-
-            div class="flex items-center justify-between" {
-                button type="submit" class="bg-blue-500 hover:bg-blue-700 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {"Submit"}
-            }
+            (simple_form_element("item", label, true, input_type, Some(current)))
+            (form_submit_button(Some("Change")))
         }
     }
 }
@@ -220,10 +199,10 @@ fn get_form(
 pub async fn internal_get_profile_edit_first_name(session: DenimSession) -> DenimResult<Markup> {
     let user = session.user.context(UnableToFindUserInfoSnafu)?;
 
-    Ok(get_form(
+    Ok(get_one_item_form(
         "/internal/profile/edit_first_name",
         "Change First Name",
-        user.first_name,
+        &user.first_name,
         "First Name",
         None,
         ValidationError::empty(),
@@ -232,7 +211,7 @@ pub async fn internal_get_profile_edit_first_name(session: DenimSession) -> Deni
 pub async fn internal_get_profile_edit_pref_name(session: DenimSession) -> DenimResult<Markup> {
     let user = session.user.context(UnableToFindUserInfoSnafu)?;
 
-    Ok(get_form(
+    Ok(get_one_item_form(
         "/internal/profile/edit_pref_name",
         "Change Preferred Name",
         user.pref_name.as_deref().unwrap_or(""),
@@ -244,10 +223,10 @@ pub async fn internal_get_profile_edit_pref_name(session: DenimSession) -> Denim
 pub async fn internal_get_profile_edit_surname(session: DenimSession) -> DenimResult<Markup> {
     let user = session.user.context(UnableToFindUserInfoSnafu)?;
 
-    Ok(get_form(
+    Ok(get_one_item_form(
         "/internal/profile/edit_surname",
         "Change Surname",
-        user.surname,
+        &user.surname,
         "Surname",
         None,
         ValidationError::empty(),
@@ -256,10 +235,10 @@ pub async fn internal_get_profile_edit_surname(session: DenimSession) -> DenimRe
 pub async fn internal_get_profile_edit_email(session: DenimSession) -> DenimResult<Markup> {
     let user = session.user.context(UnableToFindUserInfoSnafu)?;
 
-    Ok(get_form(
+    Ok(get_one_item_form(
         "/internal/profile/edit_email",
         "Change Email",
-        user.email,
+        &user.email,
         "Email",
         Some("email"),
         ValidationError::empty(),
@@ -457,7 +436,7 @@ pub async fn internal_post_profile_edit_first_name(
     handle_change_result(
         change_first_name(item, &user.first_name, state, user.id).await,
         move |e| {
-            get_form(
+            get_one_item_form(
                 "/internal/profile/edit_first_name",
                 "Change First Name",
                 &user.first_name,
@@ -516,7 +495,7 @@ pub async fn internal_post_profile_edit_pref_name(
     handle_change_result(
         change_pref_name(item, user.pref_name.as_deref(), state, user.id).await,
         |e| {
-            get_form(
+            get_one_item_form(
                 "/internal/profile/edit_pref_name",
                 "Change Preferred Name",
                 user.pref_name.as_deref().unwrap_or(""),
@@ -568,7 +547,7 @@ pub async fn internal_post_profile_edit_surname(
     handle_change_result(
         change_surname(item, &user.surname, state, user.id).await,
         move |e| {
-            get_form(
+            get_one_item_form(
                 "/internal/profile/edit_surname",
                 "Change Surname",
                 &user.surname,
@@ -630,7 +609,7 @@ pub async fn internal_post_profile_edit_email(
     handle_change_result(
         change_email(item, &user.email, state, user.id).await,
         |e| {
-            get_form(
+            get_one_item_form(
                 "/internal/profile/edit_email",
                 "Change Email",
                 &user.email,

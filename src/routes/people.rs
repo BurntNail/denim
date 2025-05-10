@@ -14,6 +14,7 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
+use crate::maud_conveniences::simple_form_element;
 
 #[axum::debug_handler]
 pub async fn get_people(
@@ -37,22 +38,10 @@ pub fn internal_get_add_people_form() -> Markup {
     html! {
         (title("Add New Person Form"))
         form hx-put="/people" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
-            div class="mb-4" {
-                label for="first_name" class="block text-sm font-bold mb-2 text-gray-300" {"First Name"}
-                input required type="text" id="first_name" name="first_name" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="pref_name" class="block text-sm font-bold mb-2 text-gray-300" {"Preferred Name (optional)"}
-                input type="text" id="pref_name" name="pref_name" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="surname" class="block text-sm font-bold mb-2 text-gray-300" {"Surname"}
-                input required type="text" id="surname" name="surname" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="email" class="block text-sm font-bold mb-2 text-gray-300" {"Email Address"}
-                input required type="email" id="email" name="email" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
+            (simple_form_element("first_name", "First Name", true, None,  None))
+            (simple_form_element("pref_name", "Preferred Name", false, None,  None))
+            (simple_form_element("surname", "Surname", true, None,  None))
+            (simple_form_element("email", "Email", true, Some("email"),  None))
 
             div class="flex items-center justify-between" {
                 button type="submit" class="bg-blue-500 hover:bg-blue-700 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {

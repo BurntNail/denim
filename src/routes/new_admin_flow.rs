@@ -5,7 +5,7 @@ use crate::{
         user::{AddPersonForm, User},
     },
     error::{DenimResult, MakeQuerySnafu},
-    maud_conveniences::{render_errors_list, title},
+    maud_conveniences::{errors_list, title},
     state::DenimState,
 };
 use axum::{
@@ -20,6 +20,7 @@ use maud::html;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
+use crate::maud_conveniences::{form_submit_button, simple_form_element};
 //flow:
 // 1. create account
 // done :)
@@ -83,38 +84,19 @@ pub async fn get_create_new_admin(
                 (title("Create new Admin Account"))
 
                 @if !errors.is_empty() {
-                    (render_errors_list(errors.as_nice_list()))
+                    (errors_list(errors.as_nice_list()))
                 }
 
                 form method="post" {
-                    div class="mb-4" {
-                        label for="first_name" class="block text-gray-300 text-sm mb-1" {"First Name"};
-                        input required type="text" id="first_name" name="first_name" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400";
-                    }
-                    div class="mb-4" {
-                        label for="pref_name" class="block text-gray-300 text-sm mb-1" {"Preferred Name"};
-                        input type="text" id="pref_name" name="pref_name" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400";
-                    }
-                    div class="mb-4" {
-                        label for="surname" class="block text-gray-300 text-sm mb-1" {"Surname"};
-                        input required type="text" id="surname" name="surname" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400";
-                    }
-                    div class="mb-4" {
-                        label for="email" class="block text-gray-300 text-sm mb-1" {"Email"};
-                        input required type="email" id="email" name="email" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400";
-                    }
-
-                    div class="mb-4" {
-                        label for="password" class="block text-gray-300 text-sm mb-1" {"Password"};
-                        input required type="password" id="password" name="password" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400";
-                    }
-                    div class="mb-6" {
-                        label for="confirm_password" class="block text-gray-300 text-sm mb-1" {"Confirm Password"}
-                        input required type="password" id="confirm_password" name="confirm_password" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400";
-                    }
-                    div class="flex items-center justify-between" {
-                        button type="submit" class="bg-green-500 hover:bg-green-700 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {"Set New Password"}
-                    }
+                    (simple_form_element("first_name", "First Name", true, None, None))
+                    (simple_form_element("pref_name", "Preferred Name", false, None, None))
+                    (simple_form_element("surname", "Surname", true, None, None))
+                    (simple_form_element("email", "Email", true, Some("email"), None))
+                    
+                    (simple_form_element("password", "Password", true, Some("password"), None))
+                    (simple_form_element("confirm_password", "Confirm Password", true, Some("password"), None))
+                    
+                    (form_submit_button(Some("Create Admin User")))
                 }
             }
         }

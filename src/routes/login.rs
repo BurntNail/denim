@@ -14,6 +14,7 @@ use maud::html;
 use secrecy::SecretString;
 use serde::Deserialize;
 use snafu::ResultExt;
+use crate::maud_conveniences::{form_submit_button, simple_form_element, title};
 
 #[derive(Deserialize)]
 pub struct LoginOptions {
@@ -45,6 +46,7 @@ pub async fn get_login(
                 div role="alert" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" {
                     strong class="font-bold" {"Alert!"}
                     br;
+                    // avoid giving extra details for security reasons :)
                     span class="block sm:inline" {"Email/Password not found or password incorrect"}
                 }
                 br;
@@ -52,32 +54,20 @@ pub async fn get_login(
 
             @if is_logged_in {
                 div class="flex flex-col items-center justify-between" {
-                    h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
-                        "Already logged in!"
-                    }
+                    (title("Already logged in!"))
                     form method="post" action="/logout" {
                         input type="submit" value="Logout?" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
                     }
                 }
             } @else {
-                h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {
-                    "Login"
-                }
+                (title("Login"))
                 form method="post" {
                     @if let Some(to) = to {
                         input type="hidden" name="next" value=(to) {} 
                     }
-                    div class="mb-4" {
-                        label for="email" class="block text-sm font-bold mb-2 text-gray-300" {"Email Address:"}
-                        input id="email" name="email" type="email" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-                    }
-                    div class="mb-4" {
-                        label for="password" class="block text-sm font-bold mb-2 text-gray-300" {"Password:"}
-                        input id="password" name="password" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-                    }
-                    div class="flex justify-between items-center" {
-                        input type="submit" value="Login" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
-                    }
+                    (simple_form_element("email", "Email", true, Some("email"), None))
+                    (simple_form_element("password", "Password", true, Some("password"), None))
+                    (form_submit_button(Some("Login")))
                 }
             }
         }

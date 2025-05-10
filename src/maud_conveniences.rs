@@ -1,10 +1,10 @@
-use crate::data::user::User;
 use maud::{Escaper, Markup, PreEscaped, Render, html};
 use std::fmt::Write;
 
-pub fn render_table<const N: usize>(
-    overall_title: &'static str,
-    titles: [&'static str; N],
+#[inline]
+pub fn table<const N: usize>(
+    overall_title: &str,
+    titles: [&str; N],
     items: Vec<[Markup; N]>,
 ) -> Markup {
     html! {
@@ -34,47 +34,51 @@ pub fn render_table<const N: usize>(
     }
 }
 
-pub fn render_nav(logged_in_user: Option<User>) -> Markup {
-    html! {
-        nav class="bg-gray-800 shadow fixed top-0 z-10 rounded-lg" id="nav" {
-            div class="container mx-auto px-4" {
-                @let height_class = if logged_in_user.is_some() {"h-24"} else {"h-16"};
-                div class={"flex items-center justify-center space-x-4 " (height_class)} {
-                    a href="/events" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"Events"}
-                    a href="/people" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"People"}
-                    a href="/" class="text-gray-300 bg-fuchsia-900 hover:bg-fuchsia-700 px-3 py-2 rounded-md text-md font-bold" {"Denim"}
-                    @match logged_in_user {
-                        Some(logged_in_user) => {
-                            div class="flex flex-col space-y-2 text-center items-center justify-between" {
-                                a href="/profile" id="nav_username" class="text-gray-300 bg-green-900 hover:bg-green-700 px-3 py-2 rounded-md text-sm font-medium" {(logged_in_user)}
-                                form method="post" action="/logout" {
-                                    input type="submit" value="Logout" class="text-gray-300 bg-red-900 hover:bg-red-700 px-3 py-2 rounded-md text-sm font-medium" {}
-                                }
-                            }
-                        },
-                        None => {
-                            a href="/login" class="text-gray-300 bg-green-900 hover:bg-green-700 px-3 py-2 rounded-md text-sm font-medium" {"Login"}
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
+#[inline]
 pub fn escape(s: impl AsRef<str>) -> PreEscaped<String> {
     let mut output = String::new();
     Escaper::new(&mut output).write_str(s.as_ref()).unwrap(); //this method always succeeds - strange api!
     PreEscaped(output)
 }
 
+#[inline]
 pub fn title(s: impl Render) -> Markup {
     html! {
         h1 class="text-2xl font-semibold mb-4" {(s)}
     }
 }
 
-pub fn render_errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
+#[inline]
+pub fn simple_form_element(id: impl Render + Clone, text: impl Render, required: bool, ty: Option<&str>, current: Option<&str>) -> Markup {
+    form_element(
+        id.clone(), text,
+        html!{
+            input value=[current] required[required] type=(ty.unwrap_or("text")) id=(id) name=(id) class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
+        }
+    )
+}
+
+#[inline]
+pub fn form_element (id: impl Render, text: impl Render, input_element: Markup) -> Markup {
+    html!{
+        div class="mb-4" {
+            label for=(id) class="block text-sm font-bold mb-2 text-gray-300" {(text)}
+            (input_element)
+        }
+    }
+}
+
+#[inline]
+pub fn form_submit_button (txt: Option<&str>) -> Markup {
+    html!{
+        div class="flex justify-between items-center" {
+            input type="submit" value=(txt.unwrap_or("Submit")) class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
+        }
+    }
+}
+
+#[inline]
+pub fn errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
     html! {
         div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
             strong class="font-bold" {"Errors:"}
@@ -86,3 +90,4 @@ pub fn render_errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
         }
     }
 }
+

@@ -2,7 +2,7 @@ use crate::{
     auth::{DenimSession, add_password},
     data::{DataType, user::User},
     error::{BcryptSnafu, DenimResult},
-    maud_conveniences::render_errors_list,
+    maud_conveniences::errors_list,
     state::DenimState,
 };
 use axum::{
@@ -18,6 +18,7 @@ use maud::html;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
+use crate::maud_conveniences::title;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -68,9 +69,9 @@ pub async fn get_replace_default_password(
 
     state.render(session, html!{
         div class="bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-full max-w-md" {
-            h2 class="text-2xl font-semibold mb-6 text-gray-300 text-center" {"Replace Default Password"}
+            (title("Replace Default Password"))
             @if !validation_errors.is_empty() {
-                (render_errors_list(validation_errors.as_nice_list()))
+                (errors_list(validation_errors.as_nice_list()))
             }
             form method="post" {
                 input type="hidden" id="next" name="next" value={(next)};

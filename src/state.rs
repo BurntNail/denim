@@ -2,7 +2,6 @@ use crate::{
     auth::DenimSession,
     config::RuntimeConfiguration,
     error::{DenimResult, GetDatabaseConnectionSnafu, MigrateSnafu, OpenDatabaseSnafu},
-    maud_conveniences::render_nav,
     routes::sse::SseEvent,
 };
 use maud::{DOCTYPE, Markup, html};
@@ -10,6 +9,7 @@ use snafu::ResultExt;
 use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
 use std::ops::Deref;
 use tokio::sync::broadcast::{Receiver, Sender, channel};
+use crate::data::user::User;
 
 #[derive(Clone, Debug)]
 pub struct DenimState {
@@ -85,5 +85,33 @@ impl Deref for DenimState {
 
     fn deref(&self) -> &Self::Target {
         &self.pool
+    }
+}
+
+fn render_nav(logged_in_user: Option<User>) -> Markup {
+    html! {
+        nav class="bg-gray-800 shadow fixed top-0 z-10 rounded-lg" id="nav" {
+            div class="container mx-auto px-4" {
+                @let height_class = if logged_in_user.is_some() {"h-24"} else {"h-16"};
+                div class={"flex items-center justify-center space-x-4 " (height_class)} {
+                    a href="/events" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"Events"}
+                    a href="/people" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"People"}
+                    a href="/" class="text-gray-300 bg-fuchsia-900 hover:bg-fuchsia-700 px-3 py-2 rounded-md text-md font-bold" {"Denim"}
+                    @match logged_in_user {
+                        Some(logged_in_user) => {
+                            div class="flex flex-col space-y-2 text-center items-center justify-between" {
+                                a href="/profile" id="nav_username" class="text-gray-300 bg-green-900 hover:bg-green-700 px-3 py-2 rounded-md text-sm font-medium" {(logged_in_user)}
+                                form method="post" action="/logout" {
+                                    input type="submit" value="Logout" class="text-gray-300 bg-red-900 hover:bg-red-700 px-3 py-2 rounded-md text-sm font-medium" {}
+                                }
+                            }
+                        },
+                        None => {
+                            a href="/login" class="text-gray-300 bg-green-900 hover:bg-green-700 px-3 py-2 rounded-md text-sm font-medium" {"Login"}
+                        }
+                    }
+                }
+            }
+        }
     }
 }

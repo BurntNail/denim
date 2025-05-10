@@ -2,7 +2,7 @@ use crate::{
     auth::DenimSession,
     data::{DataType, IdForm, event::Event, user::User},
     error::{DenimError, DenimResult},
-    maud_conveniences::{escape, render_table, title},
+    maud_conveniences::{escape, table, title},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -11,6 +11,7 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
+use crate::maud_conveniences::{form_element, form_submit_button, simple_form_element};
 
 #[axum::debug_handler]
 pub async fn get_events(State(state): State<DenimState>, session: DenimSession) -> Markup {
@@ -22,7 +23,7 @@ pub async fn get_events(State(state): State<DenimState>, session: DenimSession) 
             }
             button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/get_events_form" hx-target="#in_focus" {
                 "Add new Event"
-            }
+            }   
         }
     })
 }
@@ -33,37 +34,20 @@ pub async fn internal_get_add_events_form(State(state): State<DenimState>) -> De
     Ok(html! {
         (title("Add New Event Form"))
         form hx-put="/events" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
-            div class="mb-4" {
-                label for="name" class="block text-sm font-bold mb-2 text-gray-300" {"Name"}
-                input required type="text" id="name" name="name" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="date" class="block text-sm font-bold mb-2 text-gray-300" {"Date/Time"}
-                input required type="datetime-local" id="date" name="date" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="location" class="block text-sm font-bold mb-2 text-gray-300" {"Location (optional)"}
-                input type="text" id="location" name="location" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="extra_info" class="block text-sm font-bold mb-2 text-gray-300" {"Extra Information (optional)"}
-                input type="text" id="extra_info" name="extra_info" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-            }
-            div class="mb-4" {
-                label for="associated_staff_member" class="block text-sm font-bold mb-2 text-gray-300" {"Associated Staff Member"}
+            (simple_form_element("name", "Name", true, None, None))
+            (simple_form_element("date", "Date/Time", true, Some("datetime-local"), None))
+            (simple_form_element("location", "Location (optional)", false, None, None))
+            (simple_form_element("extra_info", "Extra Information (optional)", false, None, None))
+            (form_element("associated_staff_member", "Associated Staff Member", html!{
                 select id="associated_staff_member" name="associated_staff_member" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
                     option value="" {"Select a Staff Member (optional)"}
                     @for staff_member in staff {
                         option value={(staff_member.id)} {(staff_member)}
                     }
                 }
-            }
+            }))
 
-            div class="flex items-center justify-between" {
-                button type="submit" class="bg-blue-500 hover:bg-blue-700 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {
-                    "Add Event"
-                }
-            }
+            (form_submit_button(Some("Add Event")))
         }
     })
 }
@@ -109,7 +93,7 @@ pub async fn internal_get_event_in_detail(
         div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
             (title(event.name))
             div class="p-6 mb-4" {
-                h2 class="text-lg font-semibold mb-2 text-gray-300 underline" {"Event Information"}
+                (title("Event Information"))
                 @if let Some(location) = event.location {
                     p class="text-gray-200 font-semibold" {
                         "Location: "
@@ -144,7 +128,7 @@ pub async fn internal_get_event_in_detail(
 pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
     let events = Event::get_all(&state).await?;
 
-    Ok(render_table(
+    Ok(table(
         "Events",
         ["Name", "Date", "Location",],
         events.into_iter()
