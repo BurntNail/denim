@@ -7,6 +7,7 @@ use axum_login::tower_sessions::cookie::time::{OffsetDateTime, error::ComponentR
 use chrono::{DateTime, Utc};
 use snafu::Snafu;
 use std::num::ParseIntError;
+use maud::{html};
 use uuid::Uuid;
 
 pub type DenimResult<T> = Result<T, DenimError>;
@@ -90,7 +91,52 @@ impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
 
 impl IntoResponse for DenimError {
     fn into_response(self) -> Response {
+        const ISE: StatusCode = StatusCode::INTERNAL_SERVER_ERROR; //internal server error
+        const NF: StatusCode = StatusCode::NOT_FOUND; //not found
+        const NA: StatusCode = StatusCode::FORBIDDEN; //not allowed
+        const BI: StatusCode = StatusCode::BAD_REQUEST; //bad input
+        
+        let basic_error = |desc| html!{
+            div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
+                strong class="font-bold" {"Denim Error"}
+                span {(desc)}
+            }
+        };
+
+        let (error_code, error_ty_desc) = match &self {
+            Self::OpenDatabase { .. } => (ISE, basic_error("Opening Database")),
+            Self::GetDatabaseConnection { .. } => (ISE, basic_error("Making Database Connection")),
+            Self::MakeQuery { source } => match source {
+                sqlx::Error::RowNotFound => (NF, basic_error("Database Item Not Found")),
+                _ => (ISE, basic_error("Querying Database"))
+            }
+            Self::MigrateError { .. } => (ISE, basic_error("Running Database Migrations")),
+            Self::InvalidDateTime { odt } => (BI, basic_error(&format!("Converting Date-Time Format, starting with {odt}"))),
+            Self::InvalidChronoDateTime { utc_dt, .. } => (ISE, basic_error(&format!("Converting Date-Time Format, starting with {utc_dt}"))),
+            Self::RmpSerdeEncode { .. } => (ISE, basic_error("Serialising Session")),
+            Self::BadEnvVar { name, source } => match source {
+                dotenvy::Error::LineParse(_, _) => (ISE, basic_error(&format!("Parsing Environment Variable {name:?}"))),
+                dotenvy::Error::Io(_) => (ISE, basic_error("IO Error with `.env` file")),
+                dotenvy::Error::EnvVar(ev) => match ev {
+                    std::env::VarError::NotPresent => (ISE, basic_error(&format!("Environment Variable {ev:?} was not present"))),
+                    std::env::VarError::NotUnicode(_) => (ISE, basic_error(&format!("Environment Variable {ev} was not unicode")))
+                },
+                _ => (ISE, basic_error(&format!("Error with Environment Variable {name:?}"))),
+            }
+            Self::ParsePort { .. } => (ISE, basic_error("Parsing port environment variable contents")),
+            Self::ParseTime { .. } => (BI, basic_error("Parsing date-time from Form Data")),
+            Self::ParseUuid { .. } =>  (BI, basic_error("Parsing UUID from Form Data")),
+            Self::MissingEvent { id } => (NF, basic_error(&format!("Finding an event ({id}) in the DB"))),
+            Self::MissingUser { id } => (NF, basic_error(&format!("Finding a user ({id}) in the DB"))),
+            Self::Bcrypt { .. } => (ISE, basic_error("Hashing")),
+            Self::TowerSession { .. } => (ISE, basic_error("Dealing with Session Management")),
+            Self::GeneratePassword => (ISE, basic_error("Generating a random password")),
+            Self::UnableToFindUserInfo => (NF, basic_error("Finding the details of a user on a sign-in mandatory page")),
+            Self::IncorrectPermissions { .. } => (NA, basic_error("Attempting to access/complete operations with insufficient permissions")),
+            Self::NoHousesOrNoForms => (ISE, basic_error("Trying to create a new student with either no houses and or forms to add them to")),
+        };
+
         error!(?self, "Error!");
-        (StatusCode::INTERNAL_SERVER_ERROR, Html("whoopsies sorry")).into_response()
+        (error_code, Html(error_ty_desc)).into_response()
     }
 }
