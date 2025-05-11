@@ -1,10 +1,11 @@
 use crate::{
     auth::PermissionsTarget,
-    data::{DataType, IdForm},
-    error::{DenimError, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
+    data::{DataType, IdForm, IntIdForm},
+    error::{BcryptSnafu, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
     maud_conveniences::title,
 };
 use axum_login::AuthUser;
+use bcrypt::DEFAULT_COST;
 use bitflags::bitflags;
 use futures::StreamExt;
 use maud::{Markup, Render, html};
@@ -17,16 +18,107 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct FormGroup {
-    #[allow(dead_code)]
     pub id: i32,
     pub name: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct HouseGroup {
-    #[allow(dead_code)]
     pub id: i32,
     pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct NewHouseOrFormGroup {
+    pub name: String,
+}
+
+impl DataType for FormGroup {
+    type Id = i32;
+    type FormForId = IntIdForm;
+    type FormForAdding = NewHouseOrFormGroup;
+
+    async fn get_from_db_by_id(id: Self::Id, conn: &mut PgConnection) -> DenimResult<Option<Self>> {
+        sqlx::query_as!(FormGroup, "SELECT * FROM public.forms WHERE id = $1", id)
+            .fetch_optional(conn)
+            .await
+            .context(MakeQuerySnafu)
+    }
+
+    async fn get_all(conn: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+        sqlx::query_as!(FormGroup, "SELECT * FROM public.forms")
+            .fetch_all(conn)
+            .await
+            .context(MakeQuerySnafu)
+    }
+
+    async fn insert_into_database(
+        to_be_added: Self::FormForAdding,
+        conn: &mut PgConnection,
+    ) -> DenimResult<Self::Id> {
+        let NewHouseOrFormGroup { name } = to_be_added;
+
+        Ok(sqlx::query!(
+            "INSERT INTO public.forms (name) VALUES ($1) RETURNING id",
+            name
+        )
+        .fetch_one(conn)
+        .await
+        .context(MakeQuerySnafu)?
+        .id)
+    }
+
+    async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
+        sqlx::query!("DELETE FROM public.forms WHERE id = $1", id)
+            .execute(conn)
+            .await
+            .context(MakeQuerySnafu)?;
+        Ok(())
+    }
+}
+
+impl DataType for HouseGroup {
+    type Id = i32;
+    type FormForId = IntIdForm;
+    type FormForAdding = NewHouseOrFormGroup;
+
+    async fn get_from_db_by_id(id: Self::Id, conn: &mut PgConnection) -> DenimResult<Option<Self>> {
+        sqlx::query_as!(HouseGroup, "SELECT * FROM public.houses WHERE id = $1", id)
+            .fetch_optional(conn)
+            .await
+            .context(MakeQuerySnafu)
+    }
+
+    async fn get_all(conn: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+        sqlx::query_as!(HouseGroup, "SELECT * FROM public.houses")
+            .fetch_all(conn)
+            .await
+            .context(MakeQuerySnafu)
+    }
+
+    async fn insert_into_database(
+        to_be_added: Self::FormForAdding,
+        conn: &mut PgConnection,
+    ) -> DenimResult<Self::Id> {
+        let NewHouseOrFormGroup { name } = to_be_added;
+
+        Ok(sqlx::query!(
+            "INSERT INTO public.houses (name) VALUES ($1) RETURNING id",
+            name
+        )
+        .fetch_one(conn)
+        .await
+        .context(MakeQuerySnafu)?
+        .id)
+    }
+
+    async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
+        sqlx::query!("DELETE FROM public.houses WHERE id = $1", id)
+            .execute(conn)
+            .await
+            .context(MakeQuerySnafu)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,17 +142,24 @@ pub struct User {
     pub email: String,
     pub bcrypt_hashed_password: Option<SecretString>,
     pub access_token: Option<SecretString>,
-    #[allow(dead_code)]
     pub current_password_is_default: bool,
     pub kind: UserKind,
 }
 
-#[derive(Deserialize)]
 pub struct AddPersonForm {
     pub first_name: String,
     pub pref_name: String,
     pub surname: String,
     pub email: String,
+    pub password: Option<SecretString>,
+    pub current_password_is_default: bool,
+    pub user_kind: AddUserKind,
+}
+
+pub enum AddUserKind {
+    Student { form: i32, house: i32 },
+    Staff,
+    Dev,
 }
 
 impl DataType for User {
@@ -166,6 +265,9 @@ impl DataType for User {
             pref_name,
             surname,
             email,
+            password,
+            current_password_is_default,
+            user_kind,
         } = to_be_added;
 
         let pref_name = if pref_name.is_empty() {
@@ -173,7 +275,51 @@ impl DataType for User {
         } else {
             Some(pref_name)
         };
-        Ok(sqlx::query!("INSERT INTO public.users (first_name, pref_name, surname, email) VALUES ($1, $2, $3, $4) RETURNING id", first_name, pref_name, surname, email).fetch_one(conn).await.context(MakeQuerySnafu)?.id)
+
+        let bcrypt_hashed_password = if let Some(password) = password {
+            Some(
+                tokio::task::spawn_blocking(move || {
+                    bcrypt::hash(password.expose_secret().as_bytes(), DEFAULT_COST)
+                })
+                .await
+                .expect("unable to join tokio task")
+                .context(BcryptSnafu)?,
+            )
+        } else {
+            None
+        };
+
+        let id = sqlx::query!(
+            "INSERT INTO public.users (first_name, pref_name, surname, email, bcrypt_hashed_password, current_password_is_default) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+            first_name, pref_name, surname, email, bcrypt_hashed_password, current_password_is_default)
+            .fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id;
+        match user_kind {
+            AddUserKind::Student { form, house } => {
+                sqlx::query!(
+                    "INSERT INTO public.students (user_id, form_id, house_id) VALUES ($1, $2, $3)",
+                    id,
+                    form,
+                    house
+                )
+                .execute(&mut *conn)
+                .await
+                .context(MakeQuerySnafu)?;
+            }
+            AddUserKind::Staff => {
+                sqlx::query!("INSERT INTO public.staff VALUES ($1)", id)
+                    .execute(&mut *conn)
+                    .await
+                    .context(MakeQuerySnafu)?;
+            }
+            AddUserKind::Dev => {
+                sqlx::query!("INSERT INTO public.developers VALUES ($1)", id)
+                    .execute(&mut *conn)
+                    .await
+                    .context(MakeQuerySnafu)?;
+            }
+        }
+
+        Ok(id)
     }
 
     async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
@@ -192,21 +338,15 @@ impl User {
             UserKind::Student { .. } => {
                 PermissionsTarget::SEE_PHOTOS | PermissionsTarget::SIGN_SELF_UP
             }
-            UserKind::Staff => PermissionsTarget::all() - PermissionsTarget::IMPORT_CSVS,
+            UserKind::Staff => {
+                PermissionsTarget::all()
+                    - PermissionsTarget::IMPORT_CSVS
+                    - PermissionsTarget::CRUD_ADMINS
+            }
             UserKind::Developer => PermissionsTarget::all(),
         }
     }
-
-    pub fn ensure_can(&self, needed: PermissionsTarget) -> DenimResult<()> {
-        let found = self.get_permissions();
-
-        if found.contains(needed) {
-            Ok(())
-        } else {
-            Err(DenimError::IncorrectPermissions { needed, found })
-        }
-    }
-
+    
     pub async fn get_all_staff(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;

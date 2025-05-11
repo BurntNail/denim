@@ -8,7 +8,7 @@ use crate::{
         user::{FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
-    maud_conveniences::{errors_list, table},
+    maud_conveniences::{errors_list, form_submit_button, simple_form_element, table, title},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -26,8 +26,7 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
-use uuid::Uuid;
-use crate::maud_conveniences::{form_submit_button, simple_form_element, title};
+use crate::auth::{AuthUtilities, PasswordUserId};
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -164,7 +163,7 @@ fn get_edit_password_form(errors: ValidationError) -> Markup {
             (simple_form_element("current", "Current Password", true, Some("password"), None))
             (simple_form_element("new", "New Password", true, Some("password"), None))
             (simple_form_element("confirmed", "Confirm New Password", true, Some("password"), None))
-            
+
             (form_submit_button(Some("Change Password")))
         }
     }
@@ -336,8 +335,7 @@ pub async fn internal_post_profile_edit_password(
             confirmed,
         }: PasswordForm,
         state: DenimState,
-        id: Uuid,
-        hash: Option<SecretString>,
+        current_user: User,
     ) -> Result<User, ValidationResult> {
         let mut errors = ValidationError::empty();
         if new.expose_secret() == current.expose_secret() {
@@ -345,7 +343,7 @@ pub async fn internal_post_profile_edit_password(
         }
 
         let password_is_valid = {
-            if let Some(bcrypt_hashed_password) = hash {
+            if let Some(bcrypt_hashed_password) = current_user.bcrypt_hashed_password.clone() {
                 tokio::task::spawn_blocking(move || {
                     let exposed_hash = bcrypt_hashed_password.expose_secret();
                     let exposed_current_try = current.expose_secret();
@@ -373,20 +371,16 @@ pub async fn internal_post_profile_edit_password(
             return Err(ValidationResult::Invalid(errors));
         }
 
-        add_password(id, new, &mut *state.get_connection().await?, false).await?;
-        let Some(user) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await?
-        else {
-            unreachable!("already been having fun with this user")
-        }; //ensure we get correct new user, in case add_password makes any changes that are important
-
+        let PasswordUserId::FullUser(user) = add_password(current_user.into(), new, &mut *state.get_connection().await?, false).await? else {
+            unreachable!("passed in user");
+        };
         Ok(user)
     }
 
-    let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
-    user.ensure_can(PermissionsTarget::CRUD_USERS)?;
-
+    let user = session.user.clone().expect("cannot change password w/o signing in");
+    
     handle_change_result(
-        change_password(password_form, state, user.id, user.bcrypt_hashed_password).await,
+        change_password(password_form, state, user).await,
         get_edit_password_form,
         session,
     )
@@ -400,14 +394,13 @@ pub async fn internal_post_profile_edit_first_name(
 ) -> DenimResult<Markup> {
     async fn change_first_name(
         first_name: String,
-        current: &str,
         state: DenimState,
-        id: Uuid,
+        mut current_user: User,
     ) -> Result<User, ValidationResult> {
         if first_name.is_empty() {
             return Err(ValidationResult::Invalid(ValidationError::EMPTY));
         }
-        if first_name == current {
+        if first_name == current_user.first_name {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
 
@@ -416,30 +409,29 @@ pub async fn internal_post_profile_edit_first_name(
         sqlx::query!(
             "UPDATE users SET first_name = $1 WHERE id = $2",
             first_name,
-            id
+            current_user.id
         )
         .execute(&mut *conn)
         .await
         .context(MakeQuerySnafu)?;
-
-        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
-            unreachable!("already been having fun with this user")
-        }; //ensure we get correct new user, in case add_password makes any changes that are important
+        
+        current_user.first_name = first_name;
         state.send_sse_event(SseEvent::CrudPerson);
 
-        Ok(user)
+        Ok(current_user)
     }
 
-    let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
-    user.ensure_can(PermissionsTarget::CRUD_USERS)?;
-
+    session.ensure_can(PermissionsTarget::CRUD_USERS)?;
+    let user = session.user.clone().expect("cannot CRUD_USERS w/o logging in");
+    let backup_first_name = user.first_name.clone();
+    
     handle_change_result(
-        change_first_name(item, &user.first_name, state, user.id).await,
+        change_first_name(item, state, user).await,
         move |e| {
             get_one_item_form(
                 "/internal/profile/edit_first_name",
                 "Change First Name",
-                &user.first_name,
+                &backup_first_name,
                 "First Name",
                 None,
                 e,
@@ -456,9 +448,8 @@ pub async fn internal_post_profile_edit_pref_name(
 ) -> DenimResult<Markup> {
     async fn change_pref_name(
         pref_name: String,
-        current: Option<&str>,
         state: DenimState,
-        id: Uuid,
+        mut current_user: User
     ) -> Result<User, ValidationResult> {
         let pref_name = if pref_name.is_empty() {
             None
@@ -466,7 +457,7 @@ pub async fn internal_post_profile_edit_pref_name(
             Some(pref_name)
         };
 
-        if pref_name.as_deref() == current {
+        if pref_name.as_deref() == current_user.pref_name.as_deref() {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
 
@@ -475,30 +466,29 @@ pub async fn internal_post_profile_edit_pref_name(
         sqlx::query!(
             "UPDATE users SET pref_name = $1 WHERE id = $2",
             pref_name,
-            id
+            current_user.id
         )
         .execute(&mut *conn)
         .await
         .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
-            unreachable!("already been having fun with this user")
-        }; //ensure we get correct new user, in case add_password makes any changes that are important
+        current_user.pref_name = pref_name;
         state.send_sse_event(SseEvent::CrudPerson);
 
-        Ok(user)
+        Ok(current_user)
     }
 
+    session.ensure_can(PermissionsTarget::CRUD_USERS)?;
     let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
-    user.ensure_can(PermissionsTarget::CRUD_USERS)?;
-
+    let backup_pref_name = user.pref_name.clone();
+    
     handle_change_result(
-        change_pref_name(item, user.pref_name.as_deref(), state, user.id).await,
+        change_pref_name(item, state, user).await,
         |e| {
             get_one_item_form(
                 "/internal/profile/edit_pref_name",
                 "Change Preferred Name",
-                user.pref_name.as_deref().unwrap_or(""),
+                backup_pref_name.as_deref().unwrap_or(""),
                 "Preferred Name",
                 None,
                 e,
@@ -515,42 +505,40 @@ pub async fn internal_post_profile_edit_surname(
 ) -> DenimResult<Markup> {
     async fn change_surname(
         surname: String,
-        current: &str,
         state: DenimState,
-        id: Uuid,
+        mut current_user: User,
     ) -> Result<User, ValidationResult> {
         if surname.is_empty() {
             return Err(ValidationResult::Invalid(ValidationError::EMPTY));
         }
-        if surname == current {
+        if surname == current_user.surname {
             return Err(ValidationResult::Invalid(ValidationError::SAME_AS_BEFORE));
         }
 
         let mut conn = state.get_connection().await?;
 
-        sqlx::query!("UPDATE users SET surname = $1 WHERE id = $2", surname, id)
+        sqlx::query!("UPDATE users SET surname = $1 WHERE id = $2", surname, current_user.id)
             .execute(&mut *conn)
             .await
             .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
-            unreachable!("already been having fun with this user")
-        }; //ensure we get correct new user, in case add_password makes any changes that are important
+        current_user.surname = surname;
         state.send_sse_event(SseEvent::CrudPerson);
 
-        Ok(user)
+        Ok(current_user)
     }
 
+    session.ensure_can(PermissionsTarget::CRUD_USERS)?;
     let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
-    user.ensure_can(PermissionsTarget::CRUD_USERS)?;
-
+    let backup_surname = user.surname.clone();
+    
     handle_change_result(
-        change_surname(item, &user.surname, state, user.id).await,
+        change_surname(item, state, user).await,
         move |e| {
             get_one_item_form(
                 "/internal/profile/edit_surname",
                 "Change Surname",
-                &user.surname,
+                &backup_surname,
                 "Surname",
                 None,
                 e,
@@ -567,9 +555,8 @@ pub async fn internal_post_profile_edit_email(
 ) -> DenimResult<Markup> {
     async fn change_email(
         email: String,
-        current: &str,
         state: DenimState,
-        id: Uuid,
+        mut current_user: User,
     ) -> Result<User, ValidationResult> {
         if email.is_empty() {
             return Err(ValidationResult::Invalid(ValidationError::EMPTY));
@@ -579,7 +566,7 @@ pub async fn internal_post_profile_edit_email(
         if !EmailAddress::is_valid(&email) {
             errors |= ValidationError::INVALID_EMAIL;
         }
-        if email == current {
+        if email == current_user.email {
             errors |= ValidationError::SAME_AS_BEFORE;
             //theoretically we can't get both lol tho
         }
@@ -590,29 +577,28 @@ pub async fn internal_post_profile_edit_email(
 
         let mut conn = state.get_connection().await?;
 
-        sqlx::query!("UPDATE users SET email = $1 WHERE id = $2", email, id)
+        sqlx::query!("UPDATE users SET email = $1 WHERE id = $2", email, current_user.id)
             .execute(&mut *conn)
             .await
             .context(MakeQuerySnafu)?;
 
-        let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
-            unreachable!("already been having fun with this user")
-        }; //ensure we get correct new user, in case add_password makes any changes that are important
+        current_user.email = email;
         state.send_sse_event(SseEvent::CrudPerson);
 
-        Ok(user)
+        Ok(current_user)
     }
 
+    session.ensure_can(PermissionsTarget::CRUD_USERS)?;
     let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
-    user.ensure_can(PermissionsTarget::CRUD_USERS)?;
-
+    let backup_email = user.email.clone();
+    
     handle_change_result(
-        change_email(item, &user.email, state, user.id).await,
+        change_email(item, state, user).await,
         |e| {
             get_one_item_form(
                 "/internal/profile/edit_email",
                 "Change Email",
-                &user.email,
+                &backup_email,
                 "Email",
                 None,
                 e,

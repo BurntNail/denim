@@ -1,11 +1,11 @@
 use crate::{
-    auth::{DenimSession, add_password},
+    auth::DenimSession,
     data::{
         DataType,
-        user::{AddPersonForm, User},
+        user::{AddPersonForm, AddUserKind, User},
     },
     error::{DenimResult, MakeQuerySnafu},
-    maud_conveniences::{errors_list, title},
+    maud_conveniences::{errors_list, form_submit_button, simple_form_element, title},
     state::DenimState,
 };
 use axum::{
@@ -20,7 +20,7 @@ use maud::html;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use crate::maud_conveniences::{form_submit_button, simple_form_element};
+
 //flow:
 // 1. create account
 // done :)
@@ -171,19 +171,15 @@ pub async fn post_add_new_admin(
             pref_name,
             surname,
             email,
+            password: Some(password),
+            current_password_is_default: false,
+            user_kind: AddUserKind::Dev,
         },
         &mut conn,
     )
     .await?;
-    sqlx::query!("INSERT INTO public.developers VALUES ($1)", id)
-        .execute(&mut *conn)
-        .await
-        .context(MakeQuerySnafu)?;
-    add_password(id, password, &mut conn, false).await?;
 
-    let Some(user) = User::get_from_db_by_id(id, &mut conn).await? else {
-        unreachable!("literally just added ;)")
-    };
+    let user = User::get_from_db_by_id(id, &mut conn).await?.expect("just added user to the database w/o issue");
     conn.commit().await.context(MakeQuerySnafu)?;
 
     session.login(&user).await?;

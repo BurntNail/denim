@@ -1,8 +1,7 @@
 use crate::{
     auth::{DenimSession, add_password},
-    data::{DataType, user::User},
     error::{BcryptSnafu, DenimResult},
-    maud_conveniences::errors_list,
+    maud_conveniences::{errors_list, title},
     state::DenimState,
 };
 use axum::{
@@ -18,7 +17,7 @@ use maud::html;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use crate::maud_conveniences::title;
+use crate::auth::PasswordUserId;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -122,7 +121,7 @@ pub async fn post_replace_default_password(
         errors |= ReplaceDefaultPasswordValidationError::EMPTY;
     }
     let password_is_same_as_before = {
-        if let Some(bcrypt_hashed_password) = user.bcrypt_hashed_password {
+        if let Some(bcrypt_hashed_password) = user.bcrypt_hashed_password.clone() {
             let new_password = new_password.clone();
             tokio::task::spawn_blocking(move || {
                 let exposed_hash = bcrypt_hashed_password.expose_secret();
@@ -146,19 +145,19 @@ pub async fn post_replace_default_password(
             errors.bits()
         )));
     }
+    
+    let mut conn = state.get_connection().await?;
 
-    add_password(
-        user.id,
+    let PasswordUserId::FullUser(user) = add_password(
+        user.into(),
         new_password,
-        &mut *state.get_connection().await?,
+        &mut conn,
         false,
     )
-    .await?;
-    let Some(user) = User::get_from_db_by_id(user.id, &mut *state.get_connection().await?).await?
-    else {
-        unreachable!("already been having fun with this user")
-    }; //ensure we get correct new user, in case add_password makes any changes that are important
-
+    .await? else {
+        unreachable!("passed in a user")
+    };
+    
     session.login(&user).await?;
 
     Ok(Redirect::to(&next))

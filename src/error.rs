@@ -73,6 +73,10 @@ pub enum DenimError {
         needed: PermissionsTarget,
         found: PermissionsTarget,
     },
+    #[snafu(display(
+        "Tried to get the new student form, but no houses and/or no forms existed to add them into"
+    ))]
+    NoHousesOrNoForms,
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {

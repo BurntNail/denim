@@ -4,18 +4,19 @@ use rand::{Rng, rng};
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
 use std::{collections::HashMap, ops::Range, sync::Arc};
+use tokio::sync::{RwLock, RwLockReadGuard};
 
 #[derive(Clone, Debug)]
 pub struct RuntimeConfiguration {
     db_config: Arc<DbConfig>,
-    auth_config: Arc<AuthConfig>,
+    auth_config: Arc<RwLock<AuthConfig>>,
 }
 
 impl RuntimeConfiguration {
     pub fn new() -> DenimResult<Self> {
         Ok(Self {
             db_config: Arc::new(DbConfig::new()?),
-            auth_config: Arc::new(AuthConfig::new()),
+            auth_config: Arc::new(RwLock::new(AuthConfig::new())),
         })
     }
 
@@ -23,8 +24,8 @@ impl RuntimeConfiguration {
         self.db_config.clone()
     }
 
-    pub fn auth_config(&self) -> Arc<AuthConfig> {
-        self.auth_config.clone()
+    pub async fn auth_config(&self) -> RwLockReadGuard<'_, AuthConfig> {
+        self.auth_config.read().await
     }
 }
 

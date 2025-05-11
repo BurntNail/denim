@@ -1,6 +1,7 @@
 use crate::{
     auth::{DenimSession, backend::DenimAuthCredentials},
     error::{DenimResult, MakeQuerySnafu},
+    maud_conveniences::{form_submit_button, simple_form_element, title},
     state::DenimState,
 };
 use axum::{
@@ -14,7 +15,6 @@ use maud::html;
 use secrecy::SecretString;
 use serde::Deserialize;
 use snafu::ResultExt;
-use crate::maud_conveniences::{form_submit_button, simple_form_element, title};
 
 #[derive(Deserialize)]
 pub struct LoginOptions {

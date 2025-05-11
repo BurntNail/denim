@@ -13,6 +13,11 @@ pub struct IdForm {
     pub id: Uuid,
 }
 
+#[derive(Deserialize)]
+pub struct IntIdForm {
+    pub id: i32,
+}
+
 //NB: would love to use something more generic
 //and i tried
 //but

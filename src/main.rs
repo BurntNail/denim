@@ -12,8 +12,9 @@ use crate::{
         login::{get_login, post_login, post_logout},
         new_admin_flow::{get_create_new_admin, post_add_new_admin},
         people::{
-            delete_person, get_people, internal_get_add_people_form, internal_get_people,
-            internal_get_person_in_detail, put_new_person,
+            delete_person, get_people, internal_get_add_dev_or_staff_form,
+            internal_get_add_student_form, internal_get_people, internal_get_person_in_detail,
+            internal_put_new_staff_or_dev, internal_put_new_student,
         },
         profile::{
             get_profile, internal_get_profile_edit_email, internal_get_profile_edit_first_name,
@@ -86,10 +87,7 @@ async fn main() {
             "/events",
             get(get_events).put(put_new_event).delete(delete_event),
         )
-        .route(
-            "/people",
-            get(get_people).put(put_new_person).delete(delete_person),
-        )
+        .route("/people", get(get_people).delete(delete_person))
         .route("/profile", get(get_profile))
         .route("/login", get(get_login).post(post_login))
         .route("/logout", post(post_logout))
@@ -110,8 +108,12 @@ async fn main() {
             get(internal_get_add_events_form),
         )
         .route(
-            "/internal/get_people_form",
-            get(internal_get_add_people_form()),
+            "/internal/new_staff_or_dev_form",
+            get(internal_get_add_dev_or_staff_form).put(internal_put_new_staff_or_dev),
+        )
+        .route(
+            "/internal/new_student_form",
+            get(internal_get_add_student_form).put(internal_put_new_student),
         )
         .route(
             "/internal/profile/get_user_specific",

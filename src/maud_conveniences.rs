@@ -49,18 +49,26 @@ pub fn title(s: impl Render) -> Markup {
 }
 
 #[inline]
-pub fn simple_form_element(id: impl Render + Clone, text: impl Render, required: bool, ty: Option<&str>, current: Option<&str>) -> Markup {
+pub fn simple_form_element(
+    id: impl Render + Clone,
+    text: impl Render,
+    required: bool,
+    ty: Option<&str>,
+    current: Option<&str>,
+) -> Markup {
     form_element(
-        id.clone(), text,
-        html!{
+        id.clone(),
+        text,
+        html! {
             input value=[current] required[required] type=(ty.unwrap_or("text")) id=(id) name=(id) class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {}
-        }
+        },
     )
 }
 
 #[inline]
-pub fn form_element (id: impl Render, text: impl Render, input_element: Markup) -> Markup {
-    html!{
+#[allow(clippy::needless_pass_by_value)]
+pub fn form_element(id: impl Render, text: impl Render, input_element: Markup) -> Markup {
+    html! {
         div class="mb-4" {
             label for=(id) class="block text-sm font-bold mb-2 text-gray-300" {(text)}
             (input_element)
@@ -69,8 +77,8 @@ pub fn form_element (id: impl Render, text: impl Render, input_element: Markup) 
 }
 
 #[inline]
-pub fn form_submit_button (txt: Option<&str>) -> Markup {
-    html!{
+pub fn form_submit_button(txt: Option<&str>) -> Markup {
+    html! {
         div class="flex justify-between items-center" {
             input type="submit" value=(txt.unwrap_or("Submit")) class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
         }
@@ -90,4 +98,3 @@ pub fn errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
         }
     }
 }
-

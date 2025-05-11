@@ -49,16 +49,11 @@ impl AuthnBackend for DenimAuthBackend {
                 else {
                     return Ok(None);
                 };
-                let Some(user) =
-                    User::get_from_db_by_id(id.id, &mut *self.state.get_connection().await?)
-                        .await?
-                else {
-                    unreachable!(
-                        "we got the ID from the database, so not clear how we now don't have a user any more"
-                    );
-                };
+                
+                let user = User::get_from_db_by_id(id.id, &mut *self.state.get_connection().await?)
+                    .await?.expect("just got this valid ID from the DB via the email");
+                
                 let Some(hash) = user.bcrypt_hashed_password.clone() else {
-                    //TODO: work out way for people to add passwords
                     return Ok(None);
                 };
 

@@ -1,6 +1,7 @@
 use crate::{
     auth::DenimSession,
     config::RuntimeConfiguration,
+    data::user::User,
     error::{DenimResult, GetDatabaseConnectionSnafu, MigrateSnafu, OpenDatabaseSnafu},
     routes::sse::SseEvent,
 };
@@ -9,7 +10,6 @@ use snafu::ResultExt;
 use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
 use std::ops::Deref;
 use tokio::sync::broadcast::{Receiver, Sender, channel};
-use crate::data::user::User;
 
 #[derive(Clone, Debug)]
 pub struct DenimState {
@@ -69,6 +69,10 @@ impl DenimState {
     #[allow(dead_code)]
     pub async fn get_transaction(&self) -> DenimResult<Transaction<Postgres>> {
         self.pool.begin().await.context(GetDatabaseConnectionSnafu)
+    }
+
+    pub const fn config(&self) -> &RuntimeConfiguration {
+        &self.config
     }
 
     pub fn subscribe_to_sse_feed(&self) -> Receiver<SseEvent> {
