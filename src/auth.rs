@@ -50,18 +50,19 @@ impl AuthUtilities for DenimSession {
 bitflags! {
     #[derive(Debug, Copy, Clone)]
     pub struct PermissionsTarget: u16 {
-        const SIGN_SELF_UP =      0b0000_0000_0000_0001;
-        const SIGN_OTHERS_UP =    0b0000_0000_0000_0010;
+        const SIGN_SELF_UP =             0b0000_0000_0000_0001;
+        const SIGN_OTHERS_UP =           0b0000_0000_0000_0010;
 
-        const VERIFY_ATTENDANCE = 0b0000_0000_0000_0100;
-        const CRUD_EVENTS =       0b0000_0000_0000_1000;
-        const CRUD_USERS =        0b0000_0000_0001_0000;
+        const VERIFY_ATTENDANCE =        0b0000_0000_0000_0100;
+        const CRUD_EVENTS =              0b0000_0000_0000_1000;
+        const CRUD_USERS =               0b0000_0000_0001_0000;
 
-        const SEE_PHOTOS =        0b0000_0000_0010_0000;
-        const IMPORT_CSVS =       0b0000_0000_0100_0000;
-        const EXPORT_CSVS =       0b0000_0000_1000_0000;
+        const SEE_PHOTOS =               0b0000_0000_0010_0000;
+        const IMPORT_CSVS =              0b0000_0000_0100_0000;
+        const EXPORT_CSVS =              0b0000_0000_1000_0000;
 
-        const CRUD_ADMINS =     0b0000_0001_0000_0000;
+        const CRUD_ADMINS =              0b0000_0001_0000_0000;
+        const VIEW_SENSITIVE_DETAILS =   0b0000_0010_0000_0000;
     }
 }
 

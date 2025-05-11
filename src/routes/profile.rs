@@ -27,6 +27,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
 use crate::auth::{AuthUtilities, PasswordUserId};
+use crate::maud_conveniences::Email;
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -70,6 +71,28 @@ pub async fn get_profile(
                         }
                     }
                     div id="form_contents" class="bg-gray-800 rounded-md w-xl p-4" {}
+                } @else {
+                    div class="flex flex-col items-center justify-center p-4" {
+                        div class="space-y-4" {
+                            div {
+                                p class="text-gray-300 text-sm" {"First Name"}
+                                p class="text-gray-100 text-lg font-medium" {(user.first_name)}
+                            }
+                            div {
+                                p class="text-gray-300 text-sm" {"Preferred Name"}
+                                p class="text-gray-100 text-lg font-medium" {(user.pref_name.unwrap_or_default())}
+                            }
+                            div {
+                                p class="text-gray-300 text-sm" {"Surname"}
+                                p class="text-gray-100 text-lg font-medium" {(user.surname)}
+                            }
+                            div {
+                                p class="text-gray-300 text-sm" {"First Name"}
+                                p class="text-gray-100 text-lg font-medium" {(Email(&user.email))}
+                            }
+
+                        }
+                    }
                 }
                 @if load_user_specific {
                     div class="border-b border-gray-200 dark:border-gray-700 w-xl" {}

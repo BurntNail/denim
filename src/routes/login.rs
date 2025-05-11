@@ -36,14 +36,19 @@ pub async fn get_login(
     {
         return Ok(Redirect::to("/onboarding/create_admin_acc").into_response());
     }
+    
+    if session.user.is_some() {
+        return Ok(Redirect::to("/").into_response());
+    }
 
-    let is_logged_in = session.user.is_some();
     let login_failed = login_failed.unwrap_or(false);
 
     Ok(state.render(session, html! {
         div class="bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-full max-w-sm" {
+            (title("Login"))
+            
             @if login_failed {
-                div role="alert" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" {
+                div role="alert" class="bg-red-100 border border-red-400 text-red-700 px-4 py-4 rounded relative" {
                     strong class="font-bold" {"Alert!"}
                     br;
                     // avoid giving extra details for security reasons :)
@@ -52,23 +57,13 @@ pub async fn get_login(
                 br;
             }
 
-            @if is_logged_in {
-                div class="flex flex-col items-center justify-between" {
-                    (title("Already logged in!"))
-                    form method="post" action="/logout" {
-                        input type="submit" value="Logout?" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {}
-                    }
+            form method="post" {
+                @if let Some(to) = to {
+                    input type="hidden" name="next" value=(to) {} 
                 }
-            } @else {
-                (title("Login"))
-                form method="post" {
-                    @if let Some(to) = to {
-                        input type="hidden" name="next" value=(to) {} 
-                    }
-                    (simple_form_element("email", "Email", true, Some("email"), None))
-                    (simple_form_element("password", "Password", true, Some("password"), None))
-                    (form_submit_button(Some("Login")))
-                }
+                (simple_form_element("email", "Email", true, Some("email"), None))
+                (simple_form_element("password", "Password", true, Some("password"), None))
+                (form_submit_button(Some("Login")))
             }
         }
     }).into_response())

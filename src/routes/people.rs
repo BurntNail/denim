@@ -16,25 +16,33 @@ use axum::{
     Form,
     extract::{Query, State},
 };
+use axum::body::Body;
+use axum::http::Response;
+use axum::response::{IntoResponse, Redirect};
 use maud::{Markup, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use uuid::Uuid;
 use crate::auth::AuthUtilities;
+use crate::maud_conveniences::Email;
 
 #[axum::debug_handler]
 pub async fn get_people(
     State(state): State<DenimState>,
     session: DenimSession,
-) -> DenimResult<Markup> {
-    Ok(state.render(session, html!{
+) -> Response<Body> {
+    if !session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS) {
+        return Redirect::to("/login?next=people").into_response();
+    }
+    
+    state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
             div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
                 div id="all_people" hx-get="/internal/get_people" hx-trigger="load" {}
                 div id="in_focus" {}
             }
         }
-    }))
+    }).into_response()
 }
 
 #[derive(Deserialize)]
@@ -147,6 +155,11 @@ pub async fn internal_put_new_staff_or_dev(
     Form(form): Form<NewStaffOrDevForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
+    let user_kind = if form.is_staff && session.can(PermissionsTarget::CRUD_ADMINS) {
+        AddUserKind::Staff
+    } else {
+        AddUserKind::Dev
+    };
 
     let password = if &form.generate_password == "on" {
         state
@@ -157,12 +170,6 @@ pub async fn internal_put_new_staff_or_dev(
             .map(Into::into)
     } else {
         None
-    };
-
-    let user_kind = if form.is_staff && session.can(PermissionsTarget::CRUD_ADMINS) {
-        AddUserKind::Staff
-    } else {
-        AddUserKind::Dev
     };
     
     let add_person_form = AddPersonForm {
@@ -181,6 +188,7 @@ pub async fn internal_put_new_staff_or_dev(
 
     internal_get_person_in_detail(
         State(state.clone()),
+        session,
         Query(InDetailForm {
             id,
             new_password: password,
@@ -236,6 +244,7 @@ pub async fn internal_put_new_student(
 
     internal_get_person_in_detail(
         State(state.clone()),
+        session,
         Query(InDetailForm {
             id,
             new_password: password,
@@ -258,6 +267,8 @@ pub async fn delete_person(
 }
 
 pub async fn internal_get_people(State(state): State<DenimState>, session: DenimSession) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
+    
     let staff = User::get_all_staff(&state).await?;
     let developers = User::get_all_developers(&state).await?;
     let students = User::get_all_students(&state).await?;
@@ -330,8 +341,11 @@ pub struct InDetailForm {
 
 pub async fn internal_get_person_in_detail(
     State(state): State<DenimState>,
+    session: DenimSession,
     Query(InDetailForm { id, new_password }): Query<InDetailForm>,
 ) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
+    
     let Some(person) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await?
     else {
         return Err(DenimError::MissingUser { id });
@@ -344,7 +358,7 @@ pub async fn internal_get_person_in_detail(
             |np| html!{ "{\"id\": \"" (id) "\", \"new_password\": \"" (np.expose_secret()) "\"}" }
         );
     
-    let can_delete = person.get_permissions().contains(
+    let can_delete = session.can(
         match person.kind {
             UserKind::Developer => PermissionsTarget::CRUD_ADMINS,
             _ => PermissionsTarget::CRUD_USERS,
@@ -360,6 +374,7 @@ pub async fn internal_get_person_in_detail(
                     (FullUserNameDisplay(&person, UsernameDisplay::empty()))
 
                     @if let Some(new_password) = new_password {
+                        br;
                         div class="py-4" {
                             p class="text-gray-200 font-semibold" {
                                 "Default Password (not shown again): "
@@ -367,6 +382,9 @@ pub async fn internal_get_person_in_detail(
                             }
                         }
                     }
+                    
+                    br;
+                    (Email(&person.email))
 
                     @match person.kind {
                         UserKind::Student {
@@ -374,24 +392,24 @@ pub async fn internal_get_person_in_detail(
                             house: HouseGroup {id: _, name: house_name},
                             events_participated
                         } => {
-                            p class="text-gray-200 font-semibold" {
-                                "House: "
-                                span class="font-medium" {(house_name)}
-                            }
-                            p class="text-gray-200 font-semibold" {
-                                "Form: "
-                                span class="font-medium" {(form_name)}
-                            }
-                            p class="text-gray-200 font-semibold" {
-                                "House Events: "
-                                span class="font-medium" {(events_participated.len())}
+                            div class="py-4" {
+                                p class="text-gray-200 font-semibold" {
+                                    "House: "
+                                    span class="font-medium" {(house_name)}
+                                }
+                                p class="text-gray-200 font-semibold" {
+                                    "Form: "
+                                    span class="font-medium" {(form_name)}
+                                }
+                                p class="text-gray-200 font-semibold" {
+                                    "House Events: "
+                                    span class="font-medium" {(events_participated.len())}
+                                }
                             }
                         },
                         _ => {}
                     }
-                    p {
-                        a href={"mailto:" (person.email)} class="text-blue-500" {(person.email)}
-                    }
+                    
                     @if can_delete {
                         br;
                         button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/people" hx-vals={"{\"id\": \"" (id) "\"}" } hx-target="#in_focus" {

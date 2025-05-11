@@ -334,9 +334,9 @@ impl DataType for User {
 impl User {
     pub fn get_permissions(&self) -> PermissionsTarget {
         match self.kind {
-            UserKind::User => PermissionsTarget::SEE_PHOTOS,
+            UserKind::User => PermissionsTarget::SEE_PHOTOS | PermissionsTarget::VIEW_SENSITIVE_DETAILS,
             UserKind::Student { .. } => {
-                PermissionsTarget::SEE_PHOTOS | PermissionsTarget::SIGN_SELF_UP
+                PermissionsTarget::SEE_PHOTOS | PermissionsTarget::SIGN_SELF_UP | PermissionsTarget::VIEW_SENSITIVE_DETAILS
             }
             UserKind::Staff => {
                 PermissionsTarget::all()
