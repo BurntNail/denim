@@ -1,14 +1,17 @@
-use crate::{auth::DenimSession, error::DenimResult, state::DenimState};
+use crate::{
+    auth::{AuthUtilities, DenimSession, PermissionsTarget},
+    error::DenimResult,
+    state::DenimState,
+};
 use axum::{extract::State, response::IntoResponse};
 use maud::html;
-use crate::auth::{AuthUtilities, PermissionsTarget};
 
 pub async fn get_index_route(
     State(state): State<DenimState>,
     session: DenimSession,
 ) -> DenimResult<impl IntoResponse> {
     let can_view_people = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
-    
+
     Ok(state.render(session, html! {
         div class="bg-gray-800 p-8 rounded shadow-md max-w-md w-full" {
             h1 class="text-2xl font-semibold mb-6 text-center" {

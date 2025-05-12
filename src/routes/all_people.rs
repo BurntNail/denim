@@ -1,41 +1,33 @@
 use crate::{
-    auth::{DenimSession, PermissionsTarget},
+    auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{
         DataType, IdForm,
-        user::{
-            AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind,
-            UsernameDisplay,
-        },
         student_groups::{FormGroup, HouseGroup},
+        user::{AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{DenimError, DenimResult, NoHousesOrNoFormsSnafu},
-    maud_conveniences::{form_element, simple_form_element, title},
+    maud_conveniences::{Email, form_element, simple_form_element, title},
     routes::sse::SseEvent,
     state::DenimState,
 };
 use axum::{
     Form,
+    body::Body,
     extract::{Query, State},
+    http::Response,
+    response::{IntoResponse, Redirect},
 };
-use axum::body::Body;
-use axum::http::Response;
-use axum::response::{IntoResponse, Redirect};
 use maud::{Markup, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use uuid::Uuid;
-use crate::auth::AuthUtilities;
-use crate::maud_conveniences::Email;
 
 #[axum::debug_handler]
-pub async fn get_people(
-    State(state): State<DenimState>,
-    session: DenimSession,
-) -> Response<Body> {
+pub async fn get_people(State(state): State<DenimState>, session: DenimSession) -> Response<Body> {
     if !session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS) {
         return Redirect::to("/login?next=people").into_response();
     }
-    
+
     state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
             div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
@@ -172,7 +164,7 @@ pub async fn internal_put_new_staff_or_dev(
     } else {
         None
     };
-    
+
     let add_person_form = AddPersonForm {
         first_name: form.first_name,
         pref_name: form.pref_name,
@@ -267,13 +259,16 @@ pub async fn delete_person(
     Ok(html! {})
 }
 
-pub async fn internal_get_people(State(state): State<DenimState>, session: DenimSession) -> DenimResult<Markup> {
+pub async fn internal_get_people(
+    State(state): State<DenimState>,
+    session: DenimSession,
+) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
-    
+
     let staff = User::get_all_staff(&state).await?;
     let developers = User::get_all_developers(&state).await?;
     let students = User::get_all_students(&state).await?;
-    
+
     let can_change_users = session.can(PermissionsTarget::CRUD_USERS);
     let can_change_admins = session.can(PermissionsTarget::CRUD_ADMINS);
 
@@ -346,25 +341,21 @@ pub async fn internal_get_person_in_detail(
     Query(InDetailForm { id, new_password }): Query<InDetailForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
-    
+
     let Some(person) = User::get_from_db_by_id(id, &mut *state.get_connection().await?).await?
     else {
         return Err(DenimError::MissingUser { id });
     };
-    
-    let hx_vals = new_password
-        .as_ref()
-        .map_or_else(
-            || html! { "{\"id\": \"" (id) "\"}" },
-            |np| html!{ "{\"id\": \"" (id) "\", \"new_password\": \"" (np.expose_secret()) "\"}" }
-        );
-    
-    let can_delete = session.can(
-        match person.kind {
-            UserKind::Developer => PermissionsTarget::CRUD_ADMINS,
-            _ => PermissionsTarget::CRUD_USERS,
-        }
+
+    let hx_vals = new_password.as_ref().map_or_else(
+        || html! { "{\"id\": \"" (id) "\"}" },
+        |np| html! { "{\"id\": \"" (id) "\", \"new_password\": \"" (np.expose_secret()) "\"}" },
     );
+
+    let can_delete = session.can(match person.kind {
+        UserKind::Developer => PermissionsTarget::CRUD_ADMINS,
+        _ => PermissionsTarget::CRUD_USERS,
+    });
 
     Ok(html! {
         div hx-get="/internal/get_person" hx-trigger="sse:crud_person" hx-vals=(hx_vals) class="container mx-auto" {
@@ -383,7 +374,7 @@ pub async fn internal_get_person_in_detail(
                             }
                         }
                     }
-                    
+
                     br;
                     (Email(&person.email))
 
@@ -410,7 +401,7 @@ pub async fn internal_get_person_in_detail(
                         },
                         _ => {}
                     }
-                    
+
                     @if can_delete {
                         br;
                         button class="bg-red-600 hover:bg-red-800 font-bold py-2 px-4 rounded" hx-delete="/people" hx-vals={"{\"id\": \"" (id) "\"}" } hx-target="#in_focus" {

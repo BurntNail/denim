@@ -92,10 +92,8 @@ pub async fn get_create_new_admin(
                     (simple_form_element("pref_name", "Preferred Name", false, None, None))
                     (simple_form_element("surname", "Surname", true, None, None))
                     (simple_form_element("email", "Email", true, Some("email"), None))
-                    
                     (simple_form_element("password", "Password", true, Some("password"), None))
                     (simple_form_element("confirm_password", "Confirm Password", true, Some("password"), None))
-                    
                     (form_submit_button(Some("Create Admin User")))
                 }
             }
@@ -179,7 +177,9 @@ pub async fn post_add_new_admin(
     )
     .await?;
 
-    let user = User::get_from_db_by_id(id, &mut conn).await?.expect("just added user to the database w/o issue");
+    let user = User::get_from_db_by_id(id, &mut conn)
+        .await?
+        .expect("just added user to the database w/o issue");
     conn.commit().await.context(MakeQuerySnafu)?;
 
     session.login(&user).await?;

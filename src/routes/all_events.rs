@@ -1,5 +1,5 @@
 use crate::{
-    auth::DenimSession,
+    auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{DataType, IdForm, event::Event, user::User},
     error::{DenimError, DenimResult},
     maud_conveniences::{
@@ -13,12 +13,11 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
-use crate::auth::{AuthUtilities, PermissionsTarget};
 
 #[axum::debug_handler]
 pub async fn get_events(State(state): State<DenimState>, session: DenimSession) -> Markup {
     let can_add_events = session.can(PermissionsTarget::CRUD_EVENTS);
-    
+
     state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
             div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
@@ -32,15 +31,18 @@ pub async fn get_events(State(state): State<DenimState>, session: DenimSession) 
             @if can_add_events {
                 button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/events/get_events_form" hx-target="#in_focus" {
                     "Add new Event"
-                }   
+                }
             }
         }
     })
 }
 
-pub async fn internal_get_add_events_form(State(state): State<DenimState>, session: DenimSession) -> DenimResult<Markup> {
+pub async fn internal_get_add_events_form(
+    State(state): State<DenimState>,
+    session: DenimSession,
+) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
-    
+
     let staff = User::get_all_staff(&state).await?;
 
     Ok(html! {
@@ -75,7 +77,7 @@ pub async fn put_new_event(
 
     let this_event =
         internal_get_event_in_detail(State(state.clone()), session, Query(IdForm { id })).await?;
-    
+
     Ok(html! {
         (this_event)
     })
@@ -87,7 +89,7 @@ pub async fn delete_event(
     Query(IdForm { id }): Query<IdForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
-    
+
     Event::remove_from_database(id, &mut *state.get_connection().await?).await?;
     state.send_sse_event(SseEvent::CrudEvent);
 
@@ -106,7 +108,7 @@ pub async fn internal_get_event_in_detail(
     else {
         return Err(DenimError::MissingEvent { id });
     };
-    
+
     let can_view_sensitives = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
     let can_delete = session.can(PermissionsTarget::CRUD_EVENTS);
 

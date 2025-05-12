@@ -1,5 +1,5 @@
 use crate::{
-    auth::{DenimSession, add_password},
+    auth::{DenimSession, PasswordUserId, add_password},
     error::{BcryptSnafu, DenimResult},
     maud_conveniences::{errors_list, title},
     state::DenimState,
@@ -17,7 +17,6 @@ use maud::html;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use crate::auth::PasswordUserId;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -145,19 +144,15 @@ pub async fn post_replace_default_password(
             errors.bits()
         )));
     }
-    
+
     let mut conn = state.get_connection().await?;
 
-    let PasswordUserId::FullUser(user) = add_password(
-        user.into(),
-        new_password,
-        &mut conn,
-        false,
-    )
-    .await? else {
+    let PasswordUserId::FullUser(user) =
+        add_password(user.into(), new_password, &mut conn, false).await?
+    else {
         unreachable!("passed in a user")
     };
-    
+
     session.login(&user).await?;
 
     Ok(Redirect::to(&next))

@@ -1,14 +1,16 @@
 #![allow(clippy::unused_async)]
 
 use crate::{
-    auth::{DenimSession, PermissionsTarget, add_password},
+    auth::{AuthUtilities, DenimSession, PasswordUserId, PermissionsTarget, add_password},
     data::{
         DataType,
         event::Event,
         user::{FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
-    maud_conveniences::{errors_list, form_submit_button, simple_form_element, table, title},
+    maud_conveniences::{
+        Email, errors_list, form_submit_button, simple_form_element, table, title,
+    },
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -26,8 +28,6 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
-use crate::auth::{AuthUtilities, PasswordUserId};
-use crate::maud_conveniences::Email;
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -394,14 +394,24 @@ pub async fn internal_post_profile_edit_password(
             return Err(ValidationResult::Invalid(errors));
         }
 
-        let PasswordUserId::FullUser(user) = add_password(current_user.into(), new, &mut *state.get_connection().await?, false).await? else {
+        let PasswordUserId::FullUser(user) = add_password(
+            current_user.into(),
+            new,
+            &mut *state.get_connection().await?,
+            false,
+        )
+        .await?
+        else {
             unreachable!("passed in user");
         };
         Ok(user)
     }
 
-    let user = session.user.clone().expect("cannot change password w/o signing in");
-    
+    let user = session
+        .user
+        .clone()
+        .expect("cannot change password w/o signing in");
+
     handle_change_result(
         change_password(password_form, state, user).await,
         get_edit_password_form,
@@ -437,7 +447,7 @@ pub async fn internal_post_profile_edit_first_name(
         .execute(&mut *conn)
         .await
         .context(MakeQuerySnafu)?;
-        
+
         current_user.first_name = first_name;
         state.send_sse_event(SseEvent::CrudPerson);
 
@@ -445,9 +455,12 @@ pub async fn internal_post_profile_edit_first_name(
     }
 
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
-    let user = session.user.clone().expect("cannot CRUD_USERS w/o logging in");
+    let user = session
+        .user
+        .clone()
+        .expect("cannot CRUD_USERS w/o logging in");
     let backup_first_name = user.first_name.clone();
-    
+
     handle_change_result(
         change_first_name(item, state, user).await,
         move |e| {
@@ -472,7 +485,7 @@ pub async fn internal_post_profile_edit_pref_name(
     async fn change_pref_name(
         pref_name: String,
         state: DenimState,
-        mut current_user: User
+        mut current_user: User,
     ) -> Result<User, ValidationResult> {
         let pref_name = if pref_name.is_empty() {
             None
@@ -504,7 +517,7 @@ pub async fn internal_post_profile_edit_pref_name(
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
     let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
     let backup_pref_name = user.pref_name.clone();
-    
+
     handle_change_result(
         change_pref_name(item, state, user).await,
         |e| {
@@ -540,10 +553,14 @@ pub async fn internal_post_profile_edit_surname(
 
         let mut conn = state.get_connection().await?;
 
-        sqlx::query!("UPDATE users SET surname = $1 WHERE id = $2", surname, current_user.id)
-            .execute(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?;
+        sqlx::query!(
+            "UPDATE users SET surname = $1 WHERE id = $2",
+            surname,
+            current_user.id
+        )
+        .execute(&mut *conn)
+        .await
+        .context(MakeQuerySnafu)?;
 
         current_user.surname = surname;
         state.send_sse_event(SseEvent::CrudPerson);
@@ -554,7 +571,7 @@ pub async fn internal_post_profile_edit_surname(
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
     let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
     let backup_surname = user.surname.clone();
-    
+
     handle_change_result(
         change_surname(item, state, user).await,
         move |e| {
@@ -600,10 +617,14 @@ pub async fn internal_post_profile_edit_email(
 
         let mut conn = state.get_connection().await?;
 
-        sqlx::query!("UPDATE users SET email = $1 WHERE id = $2", email, current_user.id)
-            .execute(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?;
+        sqlx::query!(
+            "UPDATE users SET email = $1 WHERE id = $2",
+            email,
+            current_user.id
+        )
+        .execute(&mut *conn)
+        .await
+        .context(MakeQuerySnafu)?;
 
         current_user.email = email;
         state.send_sse_event(SseEvent::CrudPerson);
@@ -614,7 +635,7 @@ pub async fn internal_post_profile_edit_email(
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
     let user = session.user.clone().context(UnableToFindUserInfoSnafu)?;
     let backup_email = user.email.clone();
-    
+
     handle_change_result(
         change_email(item, state, user).await,
         |e| {

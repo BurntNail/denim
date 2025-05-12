@@ -36,7 +36,7 @@ pub async fn get_login(
     {
         return Ok(Redirect::to("/onboarding/create_admin_acc").into_response());
     }
-    
+
     if session.user.is_some() {
         return Ok(Redirect::to("/").into_response());
     }
@@ -46,7 +46,6 @@ pub async fn get_login(
     Ok(state.render(session, html! {
         div class="bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-full max-w-sm" {
             (title("Login"))
-            
             @if login_failed {
                 div role="alert" class="bg-red-100 border border-red-400 text-red-700 px-4 py-4 rounded relative" {
                     strong class="font-bold" {"Alert!"}

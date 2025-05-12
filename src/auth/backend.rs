@@ -49,10 +49,11 @@ impl AuthnBackend for DenimAuthBackend {
                 else {
                     return Ok(None);
                 };
-                
+
                 let user = User::get_from_db_by_id(id.id, &mut *self.state.get_connection().await?)
-                    .await?.expect("just got this valid ID from the DB via the email");
-                
+                    .await?
+                    .expect("just got this valid ID from the DB via the email");
+
                 let Some(hash) = user.bcrypt_hashed_password.clone() else {
                     return Ok(None);
                 };

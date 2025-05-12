@@ -5,9 +5,9 @@ use axum::{
 };
 use axum_login::tower_sessions::cookie::time::{OffsetDateTime, error::ComponentRange};
 use chrono::{DateTime, Utc};
+use maud::html;
 use snafu::Snafu;
 use std::num::ParseIntError;
-use maud::{html};
 use uuid::Uuid;
 
 pub type DenimResult<T> = Result<T, DenimError>;
@@ -95,11 +95,13 @@ impl IntoResponse for DenimError {
         const NF: StatusCode = StatusCode::NOT_FOUND; //not found
         const NA: StatusCode = StatusCode::FORBIDDEN; //not allowed
         const BI: StatusCode = StatusCode::BAD_REQUEST; //bad input
-        
-        let basic_error = |desc| html!{
-            div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
-                strong class="font-bold" {"Denim Error"}
-                span {(desc)}
+
+        let basic_error = |desc| {
+            html! {
+                div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
+                    strong class="font-bold" {"Denim Error"}
+                    span {(desc)}
+                }
             }
         };
 
@@ -108,32 +110,73 @@ impl IntoResponse for DenimError {
             Self::GetDatabaseConnection { .. } => (ISE, basic_error("Making Database Connection")),
             Self::MakeQuery { source } => match source {
                 sqlx::Error::RowNotFound => (NF, basic_error("Database Item Not Found")),
-                _ => (ISE, basic_error("Querying Database"))
-            }
+                _ => (ISE, basic_error("Querying Database")),
+            },
             Self::MigrateError { .. } => (ISE, basic_error("Running Database Migrations")),
-            Self::InvalidDateTime { odt } => (BI, basic_error(&format!("Converting Date-Time Format, starting with {odt}"))),
-            Self::InvalidChronoDateTime { utc_dt, .. } => (ISE, basic_error(&format!("Converting Date-Time Format, starting with {utc_dt}"))),
+            Self::InvalidDateTime { odt } => (
+                BI,
+                basic_error(&format!("Converting Date-Time Format, starting with {odt}")),
+            ),
+            Self::InvalidChronoDateTime { utc_dt, .. } => (
+                ISE,
+                basic_error(&format!(
+                    "Converting Date-Time Format, starting with {utc_dt}"
+                )),
+            ),
             Self::RmpSerdeEncode { .. } => (ISE, basic_error("Serialising Session")),
             Self::BadEnvVar { name, source } => match source {
-                dotenvy::Error::LineParse(_, _) => (ISE, basic_error(&format!("Parsing Environment Variable {name:?}"))),
+                dotenvy::Error::LineParse(_, _) => (
+                    ISE,
+                    basic_error(&format!("Parsing Environment Variable {name:?}")),
+                ),
                 dotenvy::Error::Io(_) => (ISE, basic_error("IO Error with `.env` file")),
                 dotenvy::Error::EnvVar(ev) => match ev {
-                    std::env::VarError::NotPresent => (ISE, basic_error(&format!("Environment Variable {ev:?} was not present"))),
-                    std::env::VarError::NotUnicode(_) => (ISE, basic_error(&format!("Environment Variable {ev} was not unicode")))
+                    std::env::VarError::NotPresent => (
+                        ISE,
+                        basic_error(&format!("Environment Variable {ev:?} was not present")),
+                    ),
+                    std::env::VarError::NotUnicode(_) => (
+                        ISE,
+                        basic_error(&format!("Environment Variable {ev} was not unicode")),
+                    ),
                 },
-                _ => (ISE, basic_error(&format!("Error with Environment Variable {name:?}"))),
-            }
-            Self::ParsePort { .. } => (ISE, basic_error("Parsing port environment variable contents")),
+                _ => (
+                    ISE,
+                    basic_error(&format!("Error with Environment Variable {name:?}")),
+                ),
+            },
+            Self::ParsePort { .. } => (
+                ISE,
+                basic_error("Parsing port environment variable contents"),
+            ),
             Self::ParseTime { .. } => (BI, basic_error("Parsing date-time from Form Data")),
-            Self::ParseUuid { .. } =>  (BI, basic_error("Parsing UUID from Form Data")),
-            Self::MissingEvent { id } => (NF, basic_error(&format!("Finding an event ({id}) in the DB"))),
-            Self::MissingUser { id } => (NF, basic_error(&format!("Finding a user ({id}) in the DB"))),
+            Self::ParseUuid { .. } => (BI, basic_error("Parsing UUID from Form Data")),
+            Self::MissingEvent { id } => (
+                NF,
+                basic_error(&format!("Finding an event ({id}) in the DB")),
+            ),
+            Self::MissingUser { id } => {
+                (NF, basic_error(&format!("Finding a user ({id}) in the DB")))
+            }
             Self::Bcrypt { .. } => (ISE, basic_error("Hashing")),
             Self::TowerSession { .. } => (ISE, basic_error("Dealing with Session Management")),
             Self::GeneratePassword => (ISE, basic_error("Generating a random password")),
-            Self::UnableToFindUserInfo => (NF, basic_error("Finding the details of a user on a sign-in mandatory page")),
-            Self::IncorrectPermissions { .. } => (NA, basic_error("Attempting to access/complete operations with insufficient permissions")),
-            Self::NoHousesOrNoForms => (ISE, basic_error("Trying to create a new student with either no houses and or forms to add them to")),
+            Self::UnableToFindUserInfo => (
+                NF,
+                basic_error("Finding the details of a user on a sign-in mandatory page"),
+            ),
+            Self::IncorrectPermissions { .. } => (
+                NA,
+                basic_error(
+                    "Attempting to access/complete operations with insufficient permissions",
+                ),
+            ),
+            Self::NoHousesOrNoForms => (
+                ISE,
+                basic_error(
+                    "Trying to create a new student with either no houses and or forms to add them to",
+                ),
+            ),
         };
 
         error!(?self, "Error!");

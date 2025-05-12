@@ -1,8 +1,10 @@
+use crate::{
+    data::{DataType, IntIdForm},
+    error::{DenimResult, MakeQuerySnafu},
+};
 use serde::Deserialize;
 use snafu::ResultExt;
 use sqlx::{PgConnection, Pool, Postgres};
-use crate::data::{DataType, IntIdForm};
-use crate::error::{DenimResult, MakeQuerySnafu};
 
 #[derive(Debug, Clone)]
 pub struct FormGroup {
@@ -50,10 +52,10 @@ impl DataType for FormGroup {
             "INSERT INTO public.forms (name) VALUES ($1) RETURNING id",
             name
         )
-            .fetch_one(conn)
-            .await
-            .context(MakeQuerySnafu)?
-            .id)
+        .fetch_one(conn)
+        .await
+        .context(MakeQuerySnafu)?
+        .id)
     }
 
     async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
@@ -94,10 +96,10 @@ impl DataType for HouseGroup {
             "INSERT INTO public.houses (name) VALUES ($1) RETURNING id",
             name
         )
-            .fetch_one(conn)
-            .await
-            .context(MakeQuerySnafu)?
-            .id)
+        .fetch_one(conn)
+        .await
+        .context(MakeQuerySnafu)?
+        .id)
     }
 
     async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {

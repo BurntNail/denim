@@ -6,8 +6,8 @@ use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
 
 pub mod event;
-pub mod user;
 pub mod student_groups;
+pub mod user;
 
 #[derive(Deserialize)]
 pub struct IdForm {

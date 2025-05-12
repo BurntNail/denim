@@ -8,14 +8,14 @@ use crate::{
             delete_event, get_events, internal_get_add_events_form, internal_get_event_in_detail,
             internal_get_events, put_new_event,
         },
-        index::get_index_route,
-        login::{get_login, post_login, post_logout},
-        new_admin_flow::{get_create_new_admin, post_add_new_admin},
         all_people::{
             delete_person, get_people, internal_get_add_dev_or_staff_form,
             internal_get_add_student_form, internal_get_people, internal_get_person_in_detail,
             internal_put_new_staff_or_dev, internal_put_new_student,
         },
+        index::get_index_route,
+        login::{get_login, post_login, post_logout},
+        new_admin_flow::{get_create_new_admin, post_add_new_admin},
         profile::{
             get_profile, internal_get_profile_edit_email, internal_get_profile_edit_first_name,
             internal_get_profile_edit_password, internal_get_profile_edit_pref_name,

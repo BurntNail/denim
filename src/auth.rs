@@ -1,6 +1,7 @@
 use crate::{
     auth::backend::DenimAuthBackend,
-    error::{BcryptSnafu, DenimResult, MakeQuerySnafu},
+    data::user::User,
+    error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu},
 };
 use axum_login::AuthSession;
 use bcrypt::hash;
@@ -9,8 +10,6 @@ use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
 use sqlx::PgConnection;
 use uuid::Uuid;
-use crate::data::user::User;
-use crate::error::DenimError;
 
 pub mod backend;
 pub mod postgres_store;
@@ -18,8 +17,8 @@ pub mod postgres_store;
 pub type DenimSession = AuthSession<DenimAuthBackend>;
 
 pub trait AuthUtilities {
-    fn can (&self, needed: PermissionsTarget) -> bool;
-    fn ensure_can (&self, needed: PermissionsTarget) -> DenimResult<()>;
+    fn can(&self, needed: PermissionsTarget) -> bool;
+    fn ensure_can(&self, needed: PermissionsTarget) -> DenimResult<()>;
 }
 
 impl AuthUtilities for DenimSession {
@@ -31,18 +30,15 @@ impl AuthUtilities for DenimSession {
     }
 
     fn ensure_can(&self, needed: PermissionsTarget) -> DenimResult<()> {
-        let found = self.user.as_ref()
-            .map_or_else(
-                PermissionsTarget::empty,
-                User::get_permissions
-            );
+        let found = self
+            .user
+            .as_ref()
+            .map_or_else(PermissionsTarget::empty, User::get_permissions);
 
         if found.contains(needed) {
             Ok(())
         } else {
-            Err(DenimError::IncorrectPermissions {
-                needed, found
-            })
+            Err(DenimError::IncorrectPermissions { needed, found })
         }
     }
 }
@@ -69,11 +65,11 @@ bitflags! {
 #[allow(clippy::large_enum_variant)]
 pub enum PasswordUserId {
     FullUser(User),
-    JustId(Uuid)
+    JustId(Uuid),
 }
 
 impl PasswordUserId {
-    pub const fn id (&self) -> Uuid {
+    pub const fn id(&self) -> Uuid {
         match self {
             Self::FullUser(u) => u.id,
             Self::JustId(i) => *i,
@@ -101,11 +97,11 @@ pub async fn add_password(
     let hashed = hash(password.expose_secret(), bcrypt::DEFAULT_COST).context(BcryptSnafu)?;
 
     sqlx::query!("UPDATE users SET bcrypt_hashed_password = $2, current_password_is_default = $3 WHERE id = $1", current_user.id(), hashed, is_default).execute(&mut *conn).await.context(MakeQuerySnafu)?;
-    
+
     if let PasswordUserId::FullUser(user) = &mut current_user {
         user.current_password_is_default = is_default;
         user.bcrypt_hashed_password = Some(hashed.into());
     }
-    
+
     Ok(current_user)
 }

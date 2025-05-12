@@ -1,6 +1,9 @@
 use crate::{
     auth::PermissionsTarget,
-    data::{DataType, IdForm},
+    data::{
+        DataType, IdForm,
+        student_groups::{FormGroup, HouseGroup},
+    },
     error::{BcryptSnafu, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
     maud_conveniences::title,
 };
@@ -14,7 +17,6 @@ use snafu::ResultExt;
 use sqlx::{PgConnection, Pool, Postgres};
 use std::sync::LazyLock;
 use uuid::Uuid;
-use crate::data::student_groups::{FormGroup, HouseGroup};
 
 #[derive(Debug, Clone)]
 pub enum UserKind {
@@ -229,9 +231,13 @@ impl DataType for User {
 impl User {
     pub fn get_permissions(&self) -> PermissionsTarget {
         match self.kind {
-            UserKind::User => PermissionsTarget::SEE_PHOTOS | PermissionsTarget::VIEW_SENSITIVE_DETAILS,
+            UserKind::User => {
+                PermissionsTarget::SEE_PHOTOS | PermissionsTarget::VIEW_SENSITIVE_DETAILS
+            }
             UserKind::Student { .. } => {
-                PermissionsTarget::SEE_PHOTOS | PermissionsTarget::SIGN_SELF_UP | PermissionsTarget::VIEW_SENSITIVE_DETAILS
+                PermissionsTarget::SEE_PHOTOS
+                    | PermissionsTarget::SIGN_SELF_UP
+                    | PermissionsTarget::VIEW_SENSITIVE_DETAILS
             }
             UserKind::Staff => {
                 PermissionsTarget::all()
@@ -241,7 +247,7 @@ impl User {
             UserKind::Developer => PermissionsTarget::all(),
         }
     }
-    
+
     pub async fn get_all_staff(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;

@@ -102,7 +102,7 @@ pub fn errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
 pub struct Email<'a>(pub &'a str);
 impl Render for Email<'_> {
     fn render(&self) -> Markup {
-        html!{
+        html! {
             a href={"mailto:" (self.0)} class="text-blue-500" {(self.0)}
         }
     }
