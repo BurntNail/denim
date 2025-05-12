@@ -1,7 +1,6 @@
 use crate::{
     auth::DenimSession,
     config::RuntimeConfiguration,
-    data::user::User,
     error::{DenimResult, GetDatabaseConnectionSnafu, MigrateSnafu, OpenDatabaseSnafu},
     routes::sse::SseEvent,
 };
@@ -10,6 +9,7 @@ use snafu::ResultExt;
 use sqlx::{Pool, Postgres, Transaction, pool::PoolConnection, postgres::PgPoolOptions};
 use std::ops::Deref;
 use tokio::sync::broadcast::{Receiver, Sender, channel};
+use crate::auth::{AuthUtilities, PermissionsTarget};
 
 #[derive(Clone, Debug)]
 pub struct DenimState {
@@ -38,7 +38,7 @@ impl DenimState {
 
     #[allow(clippy::unused_self, clippy::needless_pass_by_value)] //in case self is ever needed :), and to allow direct html! usage
     pub fn render(&self, auth_session: DenimSession, markup: Markup) -> Markup {
-        let nav = render_nav(auth_session.user);
+        let nav = render_nav(&auth_session);
 
         html! {
             (DOCTYPE)
@@ -92,14 +92,19 @@ impl Deref for DenimState {
     }
 }
 
-fn render_nav(logged_in_user: Option<User>) -> Markup {
+fn render_nav(session: &DenimSession) -> Markup {
+    let can_view_people = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
+    let logged_in_user = session.user.as_ref();
+    
     html! {
         nav class="bg-gray-800 shadow fixed top-0 z-10 rounded-lg" id="nav" {
             div class="container mx-auto px-4" {
                 @let height_class = if logged_in_user.is_some() {"h-24"} else {"h-16"};
                 div class={"flex items-center justify-center space-x-4 " (height_class)} {
                     a href="/events" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"Events"}
-                    a href="/people" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"People"}
+                    @if can_view_people {
+                        a href="/people" class="text-gray-300 bg-slate-900 hover:bg-slate-700 px-3 py-2 rounded-md text-sm font-medium" {"People"}
+                    }
                     a href="/" class="text-gray-300 bg-fuchsia-900 hover:bg-fuchsia-700 px-3 py-2 rounded-md text-md font-bold" {"Denim"}
                     @match logged_in_user {
                         Some(logged_in_user) => {

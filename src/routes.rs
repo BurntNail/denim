@@ -6,3 +6,4 @@ pub mod new_admin_flow;
 pub mod profile;
 pub mod set_new_password;
 pub mod sse;
+pub mod event_in_detail;

@@ -93,9 +93,13 @@ pub async fn delete_event(
     session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
 
     Event::remove_from_database(id, &mut *state.get_connection().await?).await?;
+    let form = internal_get_add_events_form(State(state.clone()), session).await?;
+
+    //technically, there's a fun thing where in some cases the website will process the crud change BEFORE the new html
+    //and that's insanely annoying
+    //but there's kinda no nice way to fix it...
     state.send_sse_event(SseEvent::CrudEvent);
 
-    let form = internal_get_add_events_form(State(state.clone()), session).await?;
     Ok(html! {
         (form)
     })
@@ -116,9 +120,10 @@ pub async fn internal_get_event_in_detail(
 
     Ok(html! {
         div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
-            (title(event.name))
-            div class="p-6 mb-4" {
-                (title("Event Information"))
+            (title(html!{
+                a class="hover:text-blue-300 underline" target="_blank" href={"/event/" (id)} {(event.name)}
+            }))
+            div class="p-4" {
                 @if let Some(location) = event.location {
                     p class="text-gray-200 font-semibold" {
                         "Location: "

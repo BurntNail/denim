@@ -42,6 +42,7 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use crate::routes::event_in_detail::get_event;
 
 #[macro_use]
 extern crate tracing;
@@ -87,6 +88,7 @@ async fn main() {
             "/events",
             get(get_events).put(put_new_event).delete(delete_event),
         )
+        .route("/event/{id}", get(get_event))
         .route("/people", get(get_people).delete(delete_person))
         .route("/profile", get(get_profile))
         .route("/login", get(get_login).post(post_login))
