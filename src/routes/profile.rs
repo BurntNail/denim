@@ -202,6 +202,7 @@ fn get_one_item_form(
     current: &str,
     label: impl Render,
     input_type: Option<&'static str>,
+    required: bool,
     errors: ValidationError,
 ) -> Markup {
     html! {
@@ -212,7 +213,7 @@ fn get_one_item_form(
         }
 
         form hx-post=(action) hx-trigger="submit" hx-target="#form_contents" class="p-4" {
-            (simple_form_element("item", label, true, input_type, Some(current)))
+            (simple_form_element("item", label, required, input_type, Some(current)))
             (form_submit_button(Some("Change")))
         }
     }
@@ -227,6 +228,7 @@ pub async fn internal_get_profile_edit_first_name(session: DenimSession) -> Deni
         &user.first_name,
         "First Name",
         None,
+        true,
         ValidationError::empty(),
     ))
 }
@@ -239,6 +241,7 @@ pub async fn internal_get_profile_edit_pref_name(session: DenimSession) -> Denim
         user.pref_name.as_deref().unwrap_or(""),
         "Preferred Name",
         None,
+        false,
         ValidationError::empty(),
     ))
 }
@@ -251,6 +254,7 @@ pub async fn internal_get_profile_edit_surname(session: DenimSession) -> DenimRe
         &user.surname,
         "Surname",
         None,
+        true,
         ValidationError::empty(),
     ))
 }
@@ -263,6 +267,7 @@ pub async fn internal_get_profile_edit_email(session: DenimSession) -> DenimResu
         &user.email,
         "Email",
         Some("email"),
+        true,
         ValidationError::empty(),
     ))
 }
@@ -470,6 +475,7 @@ pub async fn internal_post_profile_edit_first_name(
                 &backup_first_name,
                 "First Name",
                 None,
+                true,
                 e,
             )
         },
@@ -527,6 +533,7 @@ pub async fn internal_post_profile_edit_pref_name(
                 backup_pref_name.as_deref().unwrap_or(""),
                 "Preferred Name",
                 None,
+                false,
                 e,
             )
         },
@@ -581,6 +588,7 @@ pub async fn internal_post_profile_edit_surname(
                 &backup_surname,
                 "Surname",
                 None,
+                true,
                 e,
             )
         },
@@ -645,6 +653,7 @@ pub async fn internal_post_profile_edit_email(
                 &backup_email,
                 "Email",
                 None,
+                true,
                 e,
             )
         },
