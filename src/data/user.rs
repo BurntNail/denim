@@ -150,7 +150,7 @@ impl DataType for User {
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.id))
             .boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
     async fn insert_into_database(
@@ -256,7 +256,7 @@ impl User {
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.user_id))
             .boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
     pub async fn get_all_students(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
@@ -267,7 +267,7 @@ impl User {
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.user_id))
             .boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
     pub async fn get_all_admins(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
@@ -278,23 +278,27 @@ impl User {
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.user_id))
             .boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 }
 
 impl Render for User {
     fn render_to(&self, buffer: &mut String) {
-        match self.pref_name.as_deref() {
-            Some(pn) => buffer.push_str(pn),
-            None => buffer.push_str(&self.first_name),
+        let first_part = match self.pref_name.as_deref() {
+            Some(pn) => pn,
+            None => self.first_name.as_str(),
+        };
+        let second_part = self.surname.as_str();
+        
+        if matches!(self.kind, UserKind::Student {..}) {
+            buffer.push_str(first_part);
+            buffer.push(' ');
+            buffer.push_str(&second_part[0..1]);
+        } else {
+            buffer.push_str(&first_part[0..1]);
+            buffer.push(' ');
+            buffer.push_str(second_part);
         }
-        buffer.push(' ');
-        buffer.push(
-            self.surname
-                .chars()
-                .next()
-                .expect("surnames must not be empty"),
-        );
     }
 }
 

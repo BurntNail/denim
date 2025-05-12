@@ -36,12 +36,14 @@ pub trait DataType: Sized {
     async fn get_all(conn: &Pool<Postgres>) -> DenimResult<Vec<Self>>;
 
     #[allow(dead_code)]
-    async fn get_ids_from_vec(
-        ids: Vec<Self::Id>,
+    async fn get_from_iter_of_ids(
+        ids: impl IntoIterator<Item = Self::Id>,
         conn: &mut PgConnection,
     ) -> DenimResult<Vec<Self>> {
-        let mut all = Vec::with_capacity(ids.len());
-        for id in ids {
+        let iter = ids.into_iter();
+        
+        let mut all = Vec::with_capacity(iter.size_hint().0);
+        for id in iter {
             if let Some(next_event) = Self::get_from_db_by_id(id, conn).await? {
                 all.push(next_event);
             }
@@ -49,7 +51,7 @@ pub trait DataType: Sized {
         Ok(all)
     }
 
-    async fn get_ids_from_fetch_stream(
+    async fn get_from_fetch_stream_of_ids(
         mut ids: BoxStream<'_, Result<Self::Id, sqlx::Error>>,
         conn: &mut PgConnection,
     ) -> DenimResult<Vec<Self>> {

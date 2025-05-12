@@ -66,7 +66,7 @@ impl DataType for Event {
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.id))
             .boxed();
-        Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
     async fn insert_into_database(
