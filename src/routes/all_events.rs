@@ -51,7 +51,9 @@ pub async fn internal_get_add_events_form(
             (simple_form_element("name", "Name", true, None, None))
             (simple_form_element("date", "Date/Time", true, Some("datetime-local"), None))
             (simple_form_element("location", "Location (optional)", false, None, None))
-            (simple_form_element("extra_info", "Extra Information (optional)", false, None, None))
+            (form_element("extra_info", "Extra Information (optional)", html!{
+                textarea id="extra_info" name="extra_info" rows="2" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400 resize-y" {}
+            }))
             (form_element("associated_staff_member", "Associated Staff Member", html!{
                 select id="associated_staff_member" name="associated_staff_member" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
                     option value="" {"Select a Staff Member (optional)"}
