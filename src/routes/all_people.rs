@@ -266,7 +266,7 @@ pub async fn internal_get_people(
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
 
     let staff = User::get_all_staff(&state).await?;
-    let developers = User::get_all_developers(&state).await?;
+    let admins = User::get_all_admins(&state).await?;
     let students = User::get_all_students(&state).await?;
 
     let can_change_users = session.can(PermissionsTarget::CRUD_USERS);
@@ -301,7 +301,7 @@ pub async fn internal_get_people(
                     }
                 }
                 div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" {
-                    @for person in developers {
+                    @for person in admins {
                         a hx-get="/internal/get_person" hx-target="#in_focus" hx-vals={"{\"id\": \"" (person.id) "\"}" } class="block rounded-lg shadow-md p-4 text-center bg-gray-700 hover:bg-gray-600" {
                             (person)
                         }
@@ -353,7 +353,7 @@ pub async fn internal_get_person_in_detail(
     );
 
     let can_delete = session.can(match person.kind {
-        UserKind::Developer => PermissionsTarget::CRUD_ADMINS,
+        UserKind::Admin => PermissionsTarget::CRUD_ADMINS,
         _ => PermissionsTarget::CRUD_USERS,
     });
 

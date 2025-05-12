@@ -27,7 +27,7 @@ pub enum UserKind {
         events_participated: Vec<Uuid>,
     },
     Staff,
-    Developer,
+    Admin,
 }
 
 #[derive(Debug, Clone)]
@@ -73,13 +73,13 @@ impl DataType for User {
             return Ok(None);
         };
 
-        let user_kind = if sqlx::query!("SELECT * FROM public.developers WHERE user_id = $1", id)
+        let user_kind = if sqlx::query!("SELECT * FROM public.admins WHERE user_id = $1", id)
             .fetch_optional(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
             .is_some()
         {
-            UserKind::Developer
+            UserKind::Admin
         } else if sqlx::query!("SELECT * FROM public.staff WHERE user_id = $1", id)
             .fetch_optional(&mut *conn)
             .await
@@ -209,7 +209,7 @@ impl DataType for User {
                     .context(MakeQuerySnafu)?;
             }
             AddUserKind::Dev => {
-                sqlx::query!("INSERT INTO public.developers VALUES ($1)", id)
+                sqlx::query!("INSERT INTO public.admins VALUES ($1)", id)
                     .execute(&mut *conn)
                     .await
                     .context(MakeQuerySnafu)?;
@@ -244,7 +244,7 @@ impl User {
                     - PermissionsTarget::IMPORT_CSVS
                     - PermissionsTarget::CRUD_ADMINS
             }
-            UserKind::Developer => PermissionsTarget::all(),
+            UserKind::Admin => PermissionsTarget::all(),
         }
     }
 
@@ -270,11 +270,11 @@ impl User {
         Self::get_ids_from_fetch_stream(ids, &mut second_conn).await
     }
 
-    pub async fn get_all_developers(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+    pub async fn get_all_admins(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        let ids = sqlx::query!("SELECT user_id FROM public.developers")
+        let ids = sqlx::query!("SELECT user_id FROM public.admins")
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.user_id))
             .boxed();
