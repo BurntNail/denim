@@ -57,6 +57,10 @@ pub enum DenimError {
     MissingEvent { id: Uuid },
     #[snafu(display("Unable to find user with UUID: {}", id))]
     MissingUser { id: Uuid },
+    #[snafu(display("Unable to find house with ID: {}", id))]
+    MissingHouseGroup {id: i32},
+    #[snafu(display("Unable to find tutor group with UUID: {}", id))]
+    MissingTutorGroup {id: Uuid},
     #[snafu(display("Error with bcrypt: {}", source))]
     Bcrypt { source: bcrypt::BcryptError },
     #[snafu(display("Error with sessions: {}", source))]
@@ -75,9 +79,9 @@ pub enum DenimError {
         found: PermissionsTarget,
     },
     #[snafu(display(
-        "Tried to get the new student form, but no houses and/or no forms existed to add them into"
+        "Tried to get the new student form, but no houses and/or no tutor groups existed to add them into"
     ))]
-    NoHousesOrNoForms,
+    NoHousesOrNoTutorGroups,
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -158,6 +162,12 @@ impl IntoResponse for DenimError {
             Self::MissingUser { id } => {
                 (NF, basic_error(&format!("Finding a user ({id}) in the DB")))
             }
+            Self::MissingHouseGroup {id} => {
+                (NF, basic_error(&format!("Finding a house ({id}) in the DB")))
+            }
+            Self::MissingTutorGroup {id} => {
+                (NF, basic_error(&format!("Finding a tutor group ({id}) in the DB")))
+            }
             Self::Bcrypt { .. } => (ISE, basic_error("Hashing")),
             Self::TowerSession { .. } => (ISE, basic_error("Dealing with Session Management")),
             Self::GeneratePassword => (ISE, basic_error("Generating a random password")),
@@ -171,10 +181,10 @@ impl IntoResponse for DenimError {
                     "Attempting to access/complete operations with insufficient permissions",
                 ),
             ),
-            Self::NoHousesOrNoForms => (
+            Self::NoHousesOrNoTutorGroups => (
                 ISE,
                 basic_error(
-                    "Trying to create a new student with either no houses and or forms to add them to",
+                    "Trying to create a new student with either no houses and or tutor groups to add them to",
                 ),
             ),
         };

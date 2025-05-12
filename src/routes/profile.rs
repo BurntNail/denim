@@ -108,7 +108,7 @@ pub async fn internal_get_profile_student_display(
     session: DenimSession,
 ) -> DenimResult<Markup> {
     let UserKind::Student {
-        form: _,
+        tutor_group: _,
         house: _,
         events_participated,
     } = session
@@ -154,7 +154,7 @@ pub async fn internal_get_profile_student_form_house_display(
     session: DenimSession,
 ) -> DenimResult<Markup> {
     let UserKind::Student {
-        form,
+        tutor_group,
         house,
         events_participated: _,
     } = session.user.context(UnableToFindUserInfoSnafu)?.kind
@@ -162,11 +162,11 @@ pub async fn internal_get_profile_student_form_house_display(
         return Err(DenimError::UnableToFindUserInfo);
     };
 
-    //TODO: link to form/house pages
+    //TODO: link to tg/house pages
     Ok(html! {
         div class="flex flex-col gap-4" {
             div class="flex flex-row gap-2" {
-                p class="text-gray-200" {"Form: " (form.name)}
+                p class="text-gray-200" {"Tutor Group: " (tutor_group.staff_member)}
                 p class="text-gray-200" {"House: " (house.name)}
             }
             button class="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" {"Edit Form/House"}

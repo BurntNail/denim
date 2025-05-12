@@ -2,7 +2,7 @@ use crate::{
     auth::PermissionsTarget,
     data::{
         DataType, IdForm,
-        student_groups::{FormGroup, HouseGroup},
+        student_groups::{TutorGroup, HouseGroup},
     },
     error::{BcryptSnafu, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
     maud_conveniences::title,
@@ -13,16 +13,17 @@ use bitflags::bitflags;
 use futures::StreamExt;
 use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
 use std::sync::LazyLock;
 use uuid::Uuid;
+use crate::error::{MissingHouseGroupSnafu, MissingTutorGroupSnafu};
 
 #[derive(Debug, Clone)]
 pub enum UserKind {
     User,
     Student {
-        form: FormGroup,
+        tutor_group: TutorGroup,
         house: HouseGroup,
         events_participated: Vec<Uuid>,
     },
@@ -54,7 +55,7 @@ pub struct AddPersonForm {
 }
 
 pub enum AddUserKind {
-    Student { form: i32, house: i32 },
+    Student { tutor_group: Uuid, house: i32 },
     Staff,
     Dev,
 }
@@ -93,22 +94,12 @@ impl DataType for User {
                 .await
                 .context(MakeQuerySnafu)?
         {
-            let form = sqlx::query_as!(
-                FormGroup,
-                "SELECT * FROM public.forms WHERE id = $1",
-                record.form_id
-            )
-            .fetch_one(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?;
-            let house = sqlx::query_as!(
-                HouseGroup,
-                "SELECT * FROM public.houses WHERE id = $1",
-                record.house_id
-            )
-            .fetch_one(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?;
+            let tutor_group = 
+                Box::pin(TutorGroup::get_from_db_by_id(record.tutor_group_id, &mut *conn))
+                    .await
+                    ?.context(MissingTutorGroupSnafu {id: record.tutor_group_id})?;
+            let house = HouseGroup::get_from_db_by_id(record.house_id, &mut *conn).await?.context(MissingHouseGroupSnafu {id: record.house_id})?; 
+            
             let events_participated = sqlx::query!(
                 "SELECT event_id FROM public.participation WHERE student_id = $1",
                 id
@@ -121,7 +112,7 @@ impl DataType for User {
             .collect();
 
             UserKind::Student {
-                form,
+                tutor_group,
                 house,
                 events_participated,
             }
@@ -191,11 +182,11 @@ impl DataType for User {
             first_name, pref_name, surname, email, bcrypt_hashed_password, current_password_is_default)
             .fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id;
         match user_kind {
-            AddUserKind::Student { form, house } => {
+            AddUserKind::Student { tutor_group, house } => {
                 sqlx::query!(
-                    "INSERT INTO public.students (user_id, form_id, house_id) VALUES ($1, $2, $3)",
+                    "INSERT INTO public.students (user_id, tutor_group_id, house_id) VALUES ($1, $2, $3)",
                     id,
-                    form,
+                    tutor_group,
                     house
                 )
                 .execute(&mut *conn)
@@ -284,10 +275,7 @@ impl User {
 
 impl Render for User {
     fn render_to(&self, buffer: &mut String) {
-        let first_part = match self.pref_name.as_deref() {
-            Some(pn) => pn,
-            None => self.first_name.as_str(),
-        };
+        let first_part = self.pref_name.as_deref().unwrap_or(self.first_name.as_str());
         let second_part = self.surname.as_str();
         
         if matches!(self.kind, UserKind::Student {..}) {

@@ -12,7 +12,7 @@ use crate::state::DenimState;
 
 pub async fn get_event (State(state): State<DenimState>, session: DenimSession, Path(id): Path<Uuid>) -> DenimResult<Markup> {
     let mut conn = state.get_connection().await?;
-    let event = Event::get_from_db_by_id(id, &mut *conn).await?.context(MissingEventSnafu {id})?;
+    let event = Event::get_from_db_by_id(id, &mut conn).await?.context(MissingEventSnafu {id})?;
 
     let can_view_sensitives = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
     
@@ -29,8 +29,8 @@ pub async fn get_event (State(state): State<DenimState>, session: DenimSession, 
             signed_up.push(rec.student_id);
         }
     }
-    let signed_up_students = User::get_from_iter_of_ids(signed_up, &mut *conn).await?;
-    let verified_students = User::get_from_iter_of_ids(verified, &mut *conn).await?;
+    let signed_up_students = User::get_from_iter_of_ids(signed_up, &mut conn).await?;
+    let verified_students = User::get_from_iter_of_ids(verified, &mut conn).await?;
 
     let extra_info = event.extra_info
         .map(|extra_info| 

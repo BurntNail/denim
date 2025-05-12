@@ -1,11 +1,12 @@
+use std::collections::HashMap;
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{
         DataType, IdForm,
-        student_groups::{FormGroup, HouseGroup},
+        student_groups::{TutorGroup, HouseGroup},
         user::{AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
-    error::{DenimError, DenimResult, NoHousesOrNoFormsSnafu},
+    error::{DenimError, DenimResult, NoHousesOrNoTutorGroupsSnafu},
     maud_conveniences::{Email, form_element, simple_form_element, title},
     routes::sse::SseEvent,
     state::DenimState,
@@ -88,11 +89,16 @@ pub async fn internal_get_add_student_form(
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
 
-    let forms = FormGroup::get_all(&state).await?;
+    let tutor_groups = TutorGroup::get_all(&state).await?;
     let houses = HouseGroup::get_all(&state).await?;
 
-    snafu::ensure!(!forms.is_empty(), NoHousesOrNoFormsSnafu);
-    snafu::ensure!(!houses.is_empty(), NoHousesOrNoFormsSnafu);
+    let house_names_by_id: HashMap<i32, String> = houses.clone()
+        .into_iter()
+        .map(|hg| (hg.id, hg.name))
+        .collect();
+
+    snafu::ensure!(!tutor_groups.is_empty(), NoHousesOrNoTutorGroupsSnafu);
+    snafu::ensure!(!houses.is_empty(), NoHousesOrNoTutorGroupsSnafu);
 
     Ok(html! {
         (title("Add New Student"))
@@ -108,10 +114,10 @@ pub async fn internal_get_add_student_form(
                 label for="generate_password" class="text-gray-300 cursor-pointer" {"Auto-Generate Password?"}
             }
 
-            (form_element("form", "Form Group", html!{
-                select id="form" name="form" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
-                    @for form in forms {
-                        option value={(form.id)} {(form.name)}
+            (form_element("tutor_group", "Tutor Group", html!{
+                select id="tutor_group" name="tutor_group" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
+                    @for tutor_group in tutor_groups {
+                        option value={(tutor_group.id)} {(house_names_by_id[&tutor_group.house_id]) " - " (tutor_group.staff_member)}
                     }
                 }
             }))
@@ -197,7 +203,7 @@ pub struct NewStudentForm {
     surname: String,
     email: String,
     generate_password: String,
-    form: i32,
+    tutor_group: Uuid,
     house: i32,
 }
 pub async fn internal_put_new_student(
@@ -226,7 +232,7 @@ pub async fn internal_put_new_student(
         password: password.clone(),
         current_password_is_default: true,
         user_kind: AddUserKind::Student {
-            form: form.form,
+            tutor_group: form.tutor_group,
             house: form.house,
         },
     };
@@ -380,18 +386,18 @@ pub async fn internal_get_person_in_detail(
 
                     @match person.kind {
                         UserKind::Student {
-                            form: FormGroup {id: _, name: form_name},
+                            tutor_group: TutorGroup {id: _, house_id: _, staff_member},
                             house: HouseGroup {id: _, name: house_name},
                             events_participated
                         } => {
                             div class="py-4" {
                                 p class="text-gray-200 font-semibold" {
-                                    "House: "
+                                    "House: " //TODO: link to house group
                                     span class="font-medium" {(house_name)}
                                 }
                                 p class="text-gray-200 font-semibold" {
-                                    "Form: "
-                                    span class="font-medium" {(form_name)}
+                                    "Tutor Group: " //TODO: Link to tutor group
+                                    span class="font-medium" {(staff_member)}
                                 }
                                 p class="text-gray-200 font-semibold" {
                                     "House Events: "
