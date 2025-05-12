@@ -3,9 +3,10 @@ use crate::{
     data::{
         DataType, IdForm,
         user::{
-            AddPersonForm, AddUserKind, FormGroup, FullUserNameDisplay, HouseGroup, User, UserKind,
+            AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind,
             UsernameDisplay,
         },
+        student_groups::{FormGroup, HouseGroup},
     },
     error::{DenimError, DenimResult, NoHousesOrNoFormsSnafu},
     maud_conveniences::{form_element, simple_form_element, title},
@@ -67,7 +68,7 @@ pub async fn internal_get_add_dev_or_staff_form(
             (title("Add New Admin"))
         }
 
-        form hx-put="/internal/new_staff_or_dev_form" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
+        form hx-put="/internal/people/new_staff_or_dev_form" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
             (simple_form_element("first_name", "First Name", true, None,  None))
             (simple_form_element("pref_name", "Preferred Name", false, None,  None))
             (simple_form_element("surname", "Surname", true, None,  None))
@@ -104,7 +105,7 @@ pub async fn internal_get_add_student_form(
     Ok(html! {
         (title("Add New Student"))
 
-        form hx-put="/internal/new_student_form" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
+        form hx-put="/internal/people/new_student_form" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
             (simple_form_element("first_name", "First Name", true, None,  None))
             (simple_form_element("pref_name", "Preferred Name", false, None,  None))
             (simple_form_element("surname", "Surname", true, None,  None))
@@ -282,7 +283,7 @@ pub async fn internal_get_people(State(state): State<DenimState>, session: Denim
                 div class="flex flex-row items-center justify-between" {
                     (title("Staff"))
                     @if can_change_users {
-                        button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/new_staff_or_dev_form?is_staff=true" hx-target="#in_focus" {
+                        button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/people/new_staff_or_dev_form?is_staff=true" hx-target="#in_focus" {
                             "Add new Staff Member"
                         }
                     }
@@ -299,7 +300,7 @@ pub async fn internal_get_people(State(state): State<DenimState>, session: Denim
                 div class="flex flex-row items-center justify-between" {
                     (title("Admins"))
                     @if can_change_admins {
-                        button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/new_staff_or_dev_form?is_staff=false" hx-target="#in_focus" {
+                        button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/people/new_staff_or_dev_form?is_staff=false" hx-target="#in_focus" {
                             "Add new Admin"
                         }
                     }
@@ -316,7 +317,7 @@ pub async fn internal_get_people(State(state): State<DenimState>, session: Denim
                 div class="flex flex-row items-center justify-between" {
                     (title("Students"))
                     @if can_change_users {
-                        button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/new_student_form" hx-target="#in_focus" {
+                        button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/people/new_student_form" hx-target="#in_focus" {
                             "Add new Student"
                         }
                     }

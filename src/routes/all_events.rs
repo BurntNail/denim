@@ -24,13 +24,13 @@ pub async fn get_events(State(state): State<DenimState>, session: DenimSession) 
             div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
                 div hx-get="/internal/get_events" hx-trigger="sse:crud_event,load" id="all_events" {}
                 @if can_add_events {
-                    div id="in_focus" hx-get="/internal/get_events_form" hx-trigger="load" {}
+                    div id="in_focus" hx-get="/internal/events/get_events_form" hx-trigger="load" {}
                 } @else {
                    div id="in_focus" {} 
                 }
             }
             @if can_add_events {
-                button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/get_events_form" hx-target="#in_focus" {
+                button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/events/get_events_form" hx-target="#in_focus" {
                     "Add new Event"
                 }   
             }

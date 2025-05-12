@@ -4,14 +4,14 @@ use crate::{
     auth::{backend::DenimAuthBackend, postgres_store::PostgresSessionStore},
     config::RuntimeConfiguration,
     routes::{
-        events::{
+        all_events::{
             delete_event, get_events, internal_get_add_events_form, internal_get_event_in_detail,
             internal_get_events, put_new_event,
         },
         index::get_index_route,
         login::{get_login, post_login, post_logout},
         new_admin_flow::{get_create_new_admin, post_add_new_admin},
-        people::{
+        all_people::{
             delete_person, get_people, internal_get_add_dev_or_staff_form,
             internal_get_add_student_form, internal_get_people, internal_get_person_in_detail,
             internal_put_new_staff_or_dev, internal_put_new_student,
@@ -104,15 +104,15 @@ async fn main() {
         .route("/internal/get_person", get(internal_get_person_in_detail))
         .route("/internal/get_event", get(internal_get_event_in_detail))
         .route(
-            "/internal/get_events_form",
+            "/internal/events/get_events_form",
             get(internal_get_add_events_form),
         )
         .route(
-            "/internal/new_staff_or_dev_form",
+            "/internal/people/new_staff_or_dev_form",
             get(internal_get_add_dev_or_staff_form).put(internal_put_new_staff_or_dev),
         )
         .route(
-            "/internal/new_student_form",
+            "/internal/people/new_student_form",
             get(internal_get_add_student_form).put(internal_put_new_student),
         )
         .route(

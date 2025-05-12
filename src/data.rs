@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 pub mod event;
 pub mod user;
+pub mod student_groups;
 
 #[derive(Deserialize)]
 pub struct IdForm {
