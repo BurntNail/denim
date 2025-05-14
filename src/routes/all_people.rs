@@ -283,21 +283,39 @@ pub async fn delete_person(
     Ok(html! {})
 }
 
+#[derive(Deserialize)]
+pub struct GetPeopleQuery {
+    filter: Option<String>
+}
+
 pub async fn internal_get_people(
     State(state): State<DenimState>,
     session: DenimSession,
+    Query(GetPeopleQuery {filter}): Query<GetPeopleQuery>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
 
-    let staff = User::get_all_staff(&state).await?;
-    let admins = User::get_all_admins(&state).await?;
-    let students = User::get_all_students(&state).await?;
+    let mut staff = User::get_all_staff(&state).await?;
+    let mut admins = User::get_all_admins(&state).await?;
+    let mut students = User::get_all_students(&state).await?;
+
+    let retain = |user: &User| {
+        filter.as_ref().is_none_or(|filter| user.name().contains(filter))
+    };
+
+    staff.retain(retain);
+    admins.retain(retain);
+    students.retain(retain);
 
     let can_change_users = session.can(PermissionsTarget::CRUD_USERS);
     let can_change_admins = session.can(PermissionsTarget::CRUD_ADMINS);
 
     Ok(html! {
         div hx-get="/internal/get_people" hx-trigger="sse:crud_person" class="container mx-auto flex flex-col space-y-8" {
+            div class="flex rounded p-4 m-4" {
+                input value=[filter] type="search" name="filter" placeholder="Begin Typing To Search Users..." hx-get="/internal/get_people" hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#all_people" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
+            }
+
             div {
                 div class="flex flex-row items-center justify-between" {
                     (subtitle("Staff"))

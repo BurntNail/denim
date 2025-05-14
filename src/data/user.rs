@@ -284,10 +284,15 @@ impl User {
             .boxed();
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
+    
+    pub fn name (&self) -> String {
+        self.render().0
+    }
 }
 
 impl Render for User {
     fn render_to(&self, buffer: &mut String) {
+        //if this ever includes HTML, update the name function above
         let first_part = self
             .pref_name
             .as_deref()
