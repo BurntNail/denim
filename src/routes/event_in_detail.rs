@@ -2,7 +2,7 @@ use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{DataType, event::Event, user::User},
     error::{DenimResult, MakeQuerySnafu, MissingEventSnafu},
-    maud_conveniences::title,
+    maud_conveniences::supertitle,
     state::DenimState,
 };
 use axum::extract::{Path, State};
@@ -56,7 +56,7 @@ pub async fn get_event(
     Ok(state.render(session, html!{
         div class="container mx-auto px-4 py-8" {
             div class="bg-gray-800 p-6 md:p-8 rounded-lg shadow-xl" {
-                (title(event.name))
+                (supertitle(event.name))
 
                 div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" {
                     div {

@@ -1,7 +1,7 @@
 use crate::{
     auth::{DenimSession, PasswordUserId, add_password},
     error::{BcryptSnafu, DenimResult},
-    maud_conveniences::{errors_list, title},
+    maud_conveniences::{errors_list, supertitle},
     state::DenimState,
 };
 use axum::{
@@ -67,7 +67,7 @@ pub async fn get_replace_default_password(
 
     state.render(session, html!{
         div class="bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-full max-w-md" {
-            (title("Replace Default Password"))
+            (supertitle("Replace Default Password"))
             @if !validation_errors.is_empty() {
                 (errors_list(None, validation_errors.as_nice_list()))
             }

@@ -3,7 +3,7 @@ use crate::{
     data::{DataType, IdForm, event::Event, user::User},
     error::{DenimError, DenimResult},
     maud_conveniences::{
-        escape, form_element, form_submit_button, simple_form_element, table, title,
+        escape, form_element, form_submit_button, simple_form_element, table,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -13,6 +13,7 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
+use crate::maud_conveniences::title;
 
 #[axum::debug_handler]
 pub async fn get_events(State(state): State<DenimState>, session: DenimSession) -> Markup {
@@ -163,7 +164,7 @@ pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult
     let events = Event::get_all(&state).await?;
 
     Ok(table(
-        "Events",
+        title("Events"),
         ["Name", "Date", "Location",],
         events.into_iter()
             .map(|evt| {

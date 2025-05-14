@@ -9,7 +9,7 @@ use crate::{
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
     maud_conveniences::{
-        Email, errors_list, form_submit_button, simple_form_element, table, title,
+        Email, errors_list, form_submit_button, simple_form_element, table, supertitle,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -28,6 +28,7 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
+use crate::maud_conveniences::subtitle;
 
 pub async fn get_profile(
     State(state): State<DenimState>,
@@ -138,11 +139,11 @@ pub async fn internal_get_profile_student_display(
     }
 
     let form_house_display = internal_get_profile_student_form_house_display(session).await?;
-    let events_table = table("Events", ["Event", "Date"], event_details);
+    let events_table = table(subtitle("Events"), ["Event", "Date"], event_details);
 
     Ok(html! {
         div class="mb-4 flex flex-col items-center justify-between space-x-4 container mx-auto bg-gray-800 rounded-md p-4 rounded-lg" {
-            (title("Student Information"))
+            (subtitle("Student Information"))
             (form_house_display)
             br;
             (events_table)
@@ -176,7 +177,7 @@ pub async fn internal_get_profile_student_form_house_display(
 
 fn get_edit_password_form(errors: ValidationError) -> Markup {
     html! {
-        (title("Change Password"))
+        (supertitle("Change Password"))
 
         @if !errors.is_empty() {
             (errors_list(None, errors.as_nice_list()))
@@ -206,7 +207,7 @@ fn get_one_item_form(
     errors: ValidationError,
 ) -> Markup {
     html! {
-        (title(form_title))
+        (subtitle(form_title))
 
         @if !errors.is_empty() {
             (errors_list(None, errors.as_nice_list()))

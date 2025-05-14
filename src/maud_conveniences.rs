@@ -4,13 +4,13 @@ use std::fmt::Write;
 
 #[inline]
 pub fn table<const N: usize>(
-    overall_title: &str,
+    overall_title: Markup,
     titles: [&str; N],
     items: Vec<[impl Render; N]>,
 ) -> Markup {
     html! {
         div class="container mx-auto" {
-            (title(overall_title))
+            (overall_title)
             div class="overflow-x-auto" {
                 table class="min-w-full bg-gray-800 rounded shadow-md" {
                     thead class="bg-gray-700" {
@@ -43,9 +43,30 @@ pub fn escape(s: impl AsRef<str>) -> PreEscaped<String> {
 }
 
 #[inline]
+pub fn supertitle(s: impl Render) -> Markup {
+    html! {
+        h1 class="text-3xl font-semibold mb-4" {(s)}
+    }
+}
+
+#[inline]
 pub fn title(s: impl Render) -> Markup {
     html! {
         h1 class="text-2xl font-semibold mb-4" {(s)}
+    }
+}
+
+#[inline]
+pub fn subtitle (s: impl Render) -> Markup {
+    html!{
+        h2 class="text-xl font-semibold mb-4" {(s)} 
+    }
+}
+
+#[inline]
+pub fn subsubtitle(s: impl Render) -> Markup {
+    html!{
+        h3 class="text-lg font-semibold mb-4" {(s)}
     }
 }
 

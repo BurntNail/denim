@@ -8,7 +8,7 @@ use crate::{
     error::{
         DenimResult, GeneratePasswordSnafu, MakeQuerySnafu, MultipartSnafu, S3Snafu, ZipSnafu,
     },
-    maud_conveniences::{Email, errors_list, form_element, form_submit_button, table, title},
+    maud_conveniences::{Email, errors_list, form_element, form_submit_button, table},
     state::DenimState,
 };
 use axum::extract::{Multipart, Query, State};
@@ -24,6 +24,8 @@ use std::{
 };
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
+use crate::maud_conveniences::{subsubtitle, title};
+use crate::routes::sse::SseEvent;
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -49,26 +51,26 @@ pub async fn get_import_export_page(
             div class="rounded shadow-xl flex flex-col p-4 m-2 bg-gray-800" {
                 (title(html!{p class="text-pink-400" {"Events"}}))
 
-                div class="mb-8" {
+                /* div class="mb-8" {
                     h3 class="text-xl font-semibold mb-4" {"Export Events"}
                     button class="bg-pink-600 hover:bg-pink-700 font-bold py-2 px-4 rounded" {
                         "Download as CSV"
                     }
-                }
+                } */
 
                 @if can_import {
-                    div class="overflow-scroll overflow-clip w-md" {
+                    div class="overflow-scroll overflow-clip" {
                         h3 class="text-xl font-semibold mb-4" {"Import Events"}
 
                         div id="import_events_form" {
                             (table(
-                                "Example Import Events CSV",
-                                ["name", "date", "location", "extra_info"],
+                                subsubtitle("CSV Format"),
+                                ["Column", "Example", "Required"],
                                 vec![
-                                    ["House Volleyball", "14/5/2025 10:20", "Sports Hall", "Bring Trainers & Sand"],
-                                    ["Y7 Football", "1/2/2026 13:40", "Common", ""],
-                                    ["Y8 Engineering", "12/11/2027 08:00", "", ""],
-                                    ["Y9 Speaking", "1/1/2005 13:20", "", "Theme: Heroes to Villains - Contact your housemaster for more details!"]
+                                    ["name", "House Football", "✅"],
+                                    ["datetime", "14/5/2025 10:20", "✅"],
+                                    ["location", "Common", "❌"],
+                                    ["extra_info", "Bring Cleats!", "❌"]
                                 ]
                             ))
 
@@ -97,27 +99,31 @@ pub async fn get_import_export_page(
             div class="rounded shadow-xl flex flex-col p-4 m-2 bg-gray-800" {
                 (title(html!{p class="text-pink-400" {"People"}}))
 
-                div class="mb-8" {
+                /* div class="mb-8" {
                     h3 class="text-xl font-semibold mb-4" {"Export People"}
                     button class="bg-pink-600 hover:bg-pink-700 font-bold py-2 px-4 rounded" {
                         "Download as CSV"
                     }
-                }
+                } */
 
                 @if can_import {
-                    div class="overflow-scroll overflow-clip w-md" {
+                    div class="overflow-scroll overflow-clip" {
                         h3 class="text-xl font-semibold mb-4" {"Import People"}
 
                         div id="import_people_forms" {
                             (table(
-                                "Example Import Events CSV",
-                                ["first_name", "pref_name", "surname", "email", "house", "tutor_email"],
+                                subsubtitle("CSV Format"),
+                                ["Column", "Example", "Required"],
                                 vec![
-                                    ["Jack", "", "Maguire", "jack@example.com", "Lion House", "tutor@example.com"],
-                                    ["Christopher", "Kris", "FakeSurname", "kris@example.com", "Seahorse House", "othertutor@example.com"]
+                                    ["first_name", "Jackson", "✅"],
+                                    ["pref_name", "Jack", "❌"],
+                                    ["surname", "Programmerson", "✅"],
+                                    ["email", "jack@example.org", "✅"],
+                                    ["house", "Lion", "✅"],
+                                    ["tutor_email", "tutor@example.org", "✅"]
                                 ]
                             ))
-
+                            
                             p class="italic" {"NB: Missing houses, tutors and tutor groups are auto-magically added."}
                             br;
 
@@ -135,6 +141,7 @@ pub async fn get_import_export_page(
     }))
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn put_add_new_draft_students(
     State(state): State<DenimState>,
     session: DenimSession,
@@ -157,7 +164,7 @@ pub async fn put_add_new_draft_students(
             session,
             Query(ImportCheckerQuery {
                 n: None,
-                dots: "".into(),
+                dots: String::new(),
             }),
         )
         .await;
@@ -268,10 +275,10 @@ pub async fn put_add_new_draft_students(
         #[allow(clippy::significant_drop_tightening)]
         let auth_config = state.config().auth_config().await;
 
-        let passwords = (0..students_to_add.len())
+        let mut passwords = (0..=students_to_add.len())
             .map(|_| auth_config.generate().context(GeneratePasswordSnafu))
             .collect::<Result<Vec<_>, _>>()?;
-        let csv_password = auth_config.generate().context(GeneratePasswordSnafu)?;
+        let csv_password = passwords.pop().expect("adding 1 to a min 0, must have an element");
 
         (passwords, csv_password)
     };
@@ -308,7 +315,7 @@ pub async fn put_add_new_draft_students(
                 &mut pg_connection,
             )
             .await?;
-
+            
             write!(&mut output_csv, "\n{email},{password}")
                 .expect("unable to add passwords to zip file");
         }
@@ -353,6 +360,8 @@ pub async fn put_add_new_draft_students(
         };
 
         pg_connection.commit().await.context(MakeQuerySnafu)?;
+        task_state.send_sse_event(SseEvent::CrudPerson);
+        
 
         Ok(html! {
             div class="flex flex-col m-4 p-4 space-y-4 rounded shadow items-center justify-center text-center" {
@@ -369,7 +378,7 @@ pub async fn put_add_new_draft_students(
         session,
         Query(ImportCheckerQuery {
             n: Some(num_students),
-            dots: "".into(),
+            dots: String::new(),
         }),
     )
     .await
@@ -410,8 +419,10 @@ pub async fn get_students_import_checker(
         _ => ".",
     };
     let fmt_num_students = num_students
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "an unknown number of".to_string());
+        .map_or_else(
+            || "an unknown number of".to_string(),
+            |n| n.to_string());
+    
     let hx_vals = html! {
         "{"
         @if let Some(n) = num_students {
@@ -421,7 +432,7 @@ pub async fn get_students_import_checker(
         "}"
     };
 
-    let html = html! {
+    Ok(html! {
         div hx-get="/import_export/import_people_fetch" hx-vals=(hx_vals) hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML" {
             div class="flex items-center justify-center p-4 m-4 shadow rounded" {
                 p {
@@ -429,9 +440,5 @@ pub async fn get_students_import_checker(
                 }
             }
         }
-    };
-
-    println!("{}", html.clone().0);
-
-    Ok(html)
+    })
 }

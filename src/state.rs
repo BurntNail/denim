@@ -33,13 +33,23 @@ pub struct DenimState {
     submit_students_job_token: Arc<AtomicBool>,
 }
 
-pub struct SubmitStudentsJobToken<'a> {
-    state: &'a DenimState,
+pub struct SubmitStudentsJobToken {
+    has_submitted: bool,
+    state: DenimState,
 }
 
-impl SubmitStudentsJobToken<'_> {
-    pub async fn submit_job(self, job: LongJobResult) {
+impl SubmitStudentsJobToken {
+    pub async fn submit_job(mut self, job: LongJobResult) {
         *self.state.import_students_job.lock().await = Some(job);
+        self.has_submitted = true;
+    }
+}
+
+impl Drop for SubmitStudentsJobToken {
+    fn drop(&mut self) {
+        if !self.has_submitted {
+            self.state.submit_students_job_token.store(false, Ordering::SeqCst);
+        }
     }
 }
 
@@ -74,6 +84,7 @@ impl DenimState {
         if is_finished {
             //looks like there's no other way of doing this, because we only want to take it if it's finished
             let job = lock.take().expect("just checked for it");
+            drop(lock);
 
             self.submit_students_job_token
                 .store(false, Ordering::SeqCst);
@@ -88,7 +99,7 @@ impl DenimState {
         if self.submit_students_job_token.swap(true, Ordering::SeqCst) {
             None
         } else {
-            Some(SubmitStudentsJobToken { state: self })
+            Some(SubmitStudentsJobToken { state: self.clone(), has_submitted: false })
         }
     }
 

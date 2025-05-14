@@ -8,7 +8,6 @@ use crate::{
         BcryptSnafu, DenimResult, EmailSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
         MissingHouseGroupSnafu, MissingTutorGroupSnafu,
     },
-    maud_conveniences::title,
 };
 use axum_login::AuthUser;
 use bcrypt::DEFAULT_COST;
@@ -21,6 +20,7 @@ use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
 use std::{str::FromStr, sync::LazyLock};
 use uuid::Uuid;
+use crate::maud_conveniences::subtitle;
 
 #[derive(Debug, Clone)]
 pub enum UserKind {
@@ -294,13 +294,12 @@ impl Render for User {
             .unwrap_or(self.first_name.as_str());
         let second_part = self.surname.as_str();
 
+        buffer.push_str(first_part);
+        buffer.push(' ');
+
         if matches!(self.kind, UserKind::Student { .. }) {
-            buffer.push_str(first_part);
-            buffer.push(' ');
             buffer.push_str(&second_part[0..1]);
         } else {
-            buffer.push_str(&first_part[0..1]);
-            buffer.push(' ');
             buffer.push_str(second_part);
         }
     }
@@ -334,7 +333,7 @@ impl Render for FullUserNameDisplay<'_> {
         };
 
         let name_part = if self.1.contains(UsernameDisplay::TITLE) {
-            title(name_part)
+            subtitle(name_part)
         } else {
             name_part
         };

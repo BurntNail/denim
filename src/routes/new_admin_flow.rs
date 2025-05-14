@@ -5,7 +5,7 @@ use crate::{
         user::{AddPersonForm, AddUserKind, User},
     },
     error::{DenimResult, MakeQuerySnafu},
-    maud_conveniences::{errors_list, form_submit_button, simple_form_element, title},
+    maud_conveniences::{errors_list, form_submit_button, simple_form_element, supertitle},
     state::DenimState,
 };
 use axum::{
@@ -77,7 +77,7 @@ pub async fn get_create_new_admin(
     Ok(state.render(session, html! {
         div class="flex items-center justify-center" {
             div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md" {
-                (title("Create new Admin Account"))
+                (supertitle("Create new Admin Account"))
 
                 @if !errors.is_empty() {
                     (errors_list(None, errors.as_nice_list()))

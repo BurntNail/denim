@@ -59,6 +59,7 @@ mod routes;
 mod state;
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() {
     dotenvy::dotenv().expect("unable to load env vars");
 

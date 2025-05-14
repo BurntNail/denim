@@ -6,7 +6,7 @@ use crate::{
         user::{AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{DenimError, DenimResult, NoHousesOrNoTutorGroupsSnafu},
-    maud_conveniences::{Email, errors_list, form_element, simple_form_element, title},
+    maud_conveniences::{Email, errors_list, form_element, simple_form_element},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -23,6 +23,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
+use crate::maud_conveniences::{subtitle, title};
 
 #[axum::debug_handler]
 pub async fn get_people(State(state): State<DenimState>, session: DenimSession) -> Response<Body> {
@@ -299,7 +300,7 @@ pub async fn internal_get_people(
         div hx-get="/internal/get_people" hx-trigger="sse:crud_person" class="container mx-auto flex flex-col space-y-8" {
             div {
                 div class="flex flex-row items-center justify-between" {
-                    (title("Staff"))
+                    (subtitle("Staff"))
                     @if can_change_users {
                         button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/people/new_staff_or_dev_form?is_staff=true" hx-target="#in_focus" {
                             "Add new Staff Member"
@@ -316,7 +317,7 @@ pub async fn internal_get_people(
             }
             div {
                 div class="flex flex-row items-center justify-between" {
-                    (title("Admins"))
+                    (subtitle("Admins"))
                     @if can_change_admins {
                         button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/people/new_staff_or_dev_form?is_staff=false" hx-target="#in_focus" {
                             "Add new Admin"
@@ -333,7 +334,7 @@ pub async fn internal_get_people(
             }
             div {
                 div class="flex flex-row items-center justify-between" {
-                    (title("Students"))
+                    (subtitle("Students"))
                     @if can_change_users {
                         button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/people/new_student_form" hx-target="#in_focus" {
                             "Add new Student"
@@ -382,7 +383,7 @@ pub async fn internal_get_person_in_detail(
 
     Ok(html! {
         div hx-get="/internal/get_person" hx-trigger="sse:crud_person" hx-vals=(hx_vals) class="container mx-auto" {
-            (title(person.clone()))
+            (subtitle(person.clone()))
 
             div class="rounded-lg shadow-md overflow-hidden bg-gray-800 max-w-md mx-auto" {
                 div class="p-4" {

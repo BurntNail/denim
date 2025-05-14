@@ -110,6 +110,7 @@ impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
 }
 
 impl IntoResponse for DenimError {
+    #[allow(clippy::too_many_lines)]
     fn into_response(self) -> Response {
         const ISE: StatusCode = StatusCode::INTERNAL_SERVER_ERROR; //internal server error
         const NF: StatusCode = StatusCode::NOT_FOUND; //not found
