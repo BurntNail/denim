@@ -1,3 +1,4 @@
+use email_address::EmailAddress;
 use maud::{Escaper, Markup, PreEscaped, Render, html};
 use std::fmt::Write;
 
@@ -5,7 +6,7 @@ use std::fmt::Write;
 pub fn table<const N: usize>(
     overall_title: &str,
     titles: [&str; N],
-    items: Vec<[Markup; N]>,
+    items: Vec<[impl Render; N]>,
 ) -> Markup {
     html! {
         div class="container mx-auto" {
@@ -86,11 +87,13 @@ pub fn form_submit_button(txt: Option<&str>) -> Markup {
 }
 
 #[inline]
-pub fn errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
+pub fn errors_list(title: Option<&'static str>, list: impl Iterator<Item = impl Render>) -> Markup {
+    let title = title.unwrap_or("Errors:");
+
     html! {
         div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
-            strong class="font-bold" {"Errors:"}
-            ul class="list-disc pl-5" {
+            strong class="font-bold" {(title)}
+            ul class="list-disc pl-5 overflow-y-clip overflow-y-scroll h-64" {
                 @for error in list {
                     li {(error)}
                 }
@@ -99,7 +102,7 @@ pub fn errors_list(list: impl Iterator<Item = impl Render>) -> Markup {
     }
 }
 
-pub struct Email<'a>(pub &'a str);
+pub struct Email<'a>(pub &'a EmailAddress);
 impl Render for Email<'_> {
     fn render(&self) -> Markup {
         html! {

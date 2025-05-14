@@ -1,6 +1,7 @@
-use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu};
+use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu, S3CredsSnafu, S3Snafu};
 use dotenvy::var;
 use rand::{Rng, rng};
+use s3::{Bucket, Region, creds::Credentials};
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
 use std::{collections::HashMap, ops::Range, sync::Arc};
@@ -10,6 +11,7 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 pub struct RuntimeConfiguration {
     db_config: Arc<DbConfig>,
     auth_config: Arc<RwLock<AuthConfig>>,
+    s3_bucket: Bucket,
 }
 
 impl RuntimeConfiguration {
@@ -17,6 +19,7 @@ impl RuntimeConfiguration {
         Ok(Self {
             db_config: Arc::new(DbConfig::new()?),
             auth_config: Arc::new(RwLock::new(AuthConfig::new())),
+            s3_bucket: get_bucket()?,
         })
     }
 
@@ -26,6 +29,10 @@ impl RuntimeConfiguration {
 
     pub async fn auth_config(&self) -> RwLockReadGuard<'_, AuthConfig> {
         self.auth_config.read().await
+    }
+
+    pub fn s3_bucket(&self) -> Bucket {
+        self.s3_bucket.clone()
     }
 }
 
@@ -109,4 +116,27 @@ impl DbConfig {
             self.database
         )
     }
+}
+
+pub fn get_bucket() -> DenimResult<Bucket> {
+    let get_env_var = |name| var(name).context(BadEnvVarSnafu { name });
+
+    let creds = {
+        let access_key = get_env_var("AWS_ACCESS_KEY_ID")?;
+        let secret_key = get_env_var("AWS_SECRET_ACCESS_KEY")?;
+
+        Credentials::new(Some(&access_key), Some(&secret_key), None, None, None)
+            .context(S3CredsSnafu)?
+    };
+
+    let region = {
+        let endpoint = get_env_var("AWS_ENDPOINT_S3_URL")?;
+        let region = get_env_var("AWS_REGION")?;
+        Region::Custom { region, endpoint }
+    };
+
+    let bucket_name = get_env_var("AWS_BUCKET_NAME")?;
+    let bucket = Bucket::new(&bucket_name, region, creds).context(S3Snafu)?;
+
+    Ok(*bucket)
 }

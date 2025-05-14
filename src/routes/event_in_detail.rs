@@ -1,28 +1,38 @@
+use crate::{
+    auth::{AuthUtilities, DenimSession, PermissionsTarget},
+    data::{DataType, event::Event, user::User},
+    error::{DenimResult, MakeQuerySnafu, MissingEventSnafu},
+    maud_conveniences::title,
+    state::DenimState,
+};
 use axum::extract::{Path, State};
-use maud::{html, Markup};
+use maud::{Markup, html};
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
-use crate::auth::{AuthUtilities, DenimSession, PermissionsTarget};
-use crate::data::DataType;
-use crate::data::event::Event;
-use crate::data::user::User;
-use crate::error::{DenimResult, MakeQuerySnafu, MissingEventSnafu};
-use crate::maud_conveniences::title;
-use crate::state::DenimState;
 
-pub async fn get_event (State(state): State<DenimState>, session: DenimSession, Path(id): Path<Uuid>) -> DenimResult<Markup> {
+pub async fn get_event(
+    State(state): State<DenimState>,
+    session: DenimSession,
+    Path(id): Path<Uuid>,
+) -> DenimResult<Markup> {
     let mut conn = state.get_connection().await?;
-    let event = Event::get_from_db_by_id(id, &mut conn).await?.context(MissingEventSnafu {id})?;
+    let event = Event::get_from_db_by_id(id, &mut conn)
+        .await?
+        .context(MissingEventSnafu { id })?;
 
     let can_view_sensitives = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
-    
+
     let mut signed_up = vec![];
     let mut verified = vec![];
-    
-    for rec in sqlx::query!("SELECT student_id, is_verified FROM participation WHERE event_id = $1", id)
-        .fetch_all(&mut *conn)
-        .await
-        .context(MakeQuerySnafu)? {
+
+    for rec in sqlx::query!(
+        "SELECT student_id, is_verified FROM participation WHERE event_id = $1",
+        id
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .context(MakeQuerySnafu)?
+    {
         if rec.is_verified {
             verified.push(rec.student_id);
         } else {
@@ -32,17 +42,16 @@ pub async fn get_event (State(state): State<DenimState>, session: DenimSession, 
     let signed_up_students = User::get_from_iter_of_ids(signed_up, &mut conn).await?;
     let verified_students = User::get_from_iter_of_ids(verified, &mut conn).await?;
 
-    let extra_info = event.extra_info
-        .map(|extra_info| 
-            html!{
-                div {
-                    @for line in extra_info.lines() {
-                        (line)
-                        br;
-                    }
+    let extra_info = event.extra_info.map(|extra_info| {
+        html! {
+            div {
+                @for line in extra_info.lines() {
+                    (line)
+                    br;
                 }
             }
-        );
+        }
+    });
 
     Ok(state.render(session, html!{
         div class="container mx-auto px-4 py-8" {

@@ -31,9 +31,7 @@ bitflags! {
         const EMPTY_FIRST_NAME =  0b0000_0000_0000_0001;
         const EMPTY_SURNAME =     0b0000_0000_0000_0010;
         const EMPTY_PASSWORD =    0b0000_0000_0000_0100;
-        const EMPTY_EMAIL =       0b0000_0000_0000_1000;
 
-        const INVALID_EMAIL =     0b0000_0000_0001_0000;
         const MISMATCH_PASSWORD = 0b0000_0000_0010_0000;
     }
 }
@@ -44,8 +42,6 @@ impl NewAdminDetailsError {
             Self::EMPTY_FIRST_NAME => Some("Provided First Name was empty"),
             Self::EMPTY_SURNAME => Some("Provided surname was empty"),
             Self::EMPTY_PASSWORD => Some("Provided password was empty"),
-            Self::EMPTY_EMAIL => Some("Provided email was empty"),
-            Self::INVALID_EMAIL => Some("Provided email wasn't valid"),
             Self::MISMATCH_PASSWORD => Some("Passwords didn't match"),
             _ => None,
         })
@@ -84,7 +80,7 @@ pub async fn get_create_new_admin(
                 (title("Create new Admin Account"))
 
                 @if !errors.is_empty() {
-                    (errors_list(errors.as_nice_list()))
+                    (errors_list(None, errors.as_nice_list()))
                 }
 
                 form method="post" {
@@ -106,7 +102,7 @@ pub struct CreateAdminAccountForm {
     first_name: String,
     pref_name: String,
     surname: String,
-    email: String,
+    email: EmailAddress,
     password: SecretString,
     confirm_password: SecretString,
 }
@@ -142,12 +138,6 @@ pub async fn post_add_new_admin(
     }
     if surname.is_empty() {
         errors |= NewAdminDetailsError::EMPTY_SURNAME;
-    }
-    if email.is_empty() {
-        errors |= NewAdminDetailsError::EMPTY_EMAIL;
-    }
-    if !EmailAddress::is_valid(&email) {
-        errors |= NewAdminDetailsError::INVALID_EMAIL;
     }
     if password.expose_secret().trim().is_empty() {
         errors |= NewAdminDetailsError::EMPTY_PASSWORD;

@@ -11,6 +11,7 @@ use axum::{
     http::Response,
     response::{IntoResponse, Redirect},
 };
+use email_address::EmailAddress;
 use maud::html;
 use secrecy::SecretString;
 use serde::Deserialize;
@@ -70,7 +71,7 @@ pub async fn get_login(
 
 #[derive(Deserialize)]
 pub struct LoginForm {
-    email: String,
+    email: EmailAddress,
     password: SecretString,
     next: Option<String>,
 }

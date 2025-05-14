@@ -58,9 +58,9 @@ pub enum DenimError {
     #[snafu(display("Unable to find user with UUID: {}", id))]
     MissingUser { id: Uuid },
     #[snafu(display("Unable to find house with ID: {}", id))]
-    MissingHouseGroup {id: i32},
+    MissingHouseGroup { id: i32 },
     #[snafu(display("Unable to find tutor group with UUID: {}", id))]
-    MissingTutorGroup {id: Uuid},
+    MissingTutorGroup { id: Uuid },
     #[snafu(display("Error with bcrypt: {}", source))]
     Bcrypt { source: bcrypt::BcryptError },
     #[snafu(display("Error with sessions: {}", source))]
@@ -82,6 +82,22 @@ pub enum DenimError {
         "Tried to get the new student form, but no houses and/or no tutor groups existed to add them into"
     ))]
     NoHousesOrNoTutorGroups,
+    #[snafu(display("Error with multipart form input: {}", source))]
+    Multipart {
+        source: axum::extract::multipart::MultipartError,
+    },
+    #[snafu(display("Error parsing email address internally: {}", source))]
+    Email { source: email_address::Error },
+    #[snafu(display("Error with ZIPs: {}", source))]
+    Zip { source: zip::result::ZipError },
+    #[snafu(display("Error with CSVs: {}", source))]
+    Csv { source: csv::Error },
+    #[snafu(display("Error with S3 Credentials: {}", source))]
+    S3Creds {
+        source: s3::creds::error::CredentialsError,
+    },
+    #[snafu(display("Error with S3: {}", source))]
+    S3 { source: s3::error::S3Error },
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -162,12 +178,14 @@ impl IntoResponse for DenimError {
             Self::MissingUser { id } => {
                 (NF, basic_error(&format!("Finding a user ({id}) in the DB")))
             }
-            Self::MissingHouseGroup {id} => {
-                (NF, basic_error(&format!("Finding a house ({id}) in the DB")))
-            }
-            Self::MissingTutorGroup {id} => {
-                (NF, basic_error(&format!("Finding a tutor group ({id}) in the DB")))
-            }
+            Self::MissingHouseGroup { id } => (
+                NF,
+                basic_error(&format!("Finding a house ({id}) in the DB")),
+            ),
+            Self::MissingTutorGroup { id } => (
+                NF,
+                basic_error(&format!("Finding a tutor group ({id}) in the DB")),
+            ),
             Self::Bcrypt { .. } => (ISE, basic_error("Hashing")),
             Self::TowerSession { .. } => (ISE, basic_error("Dealing with Session Management")),
             Self::GeneratePassword => (ISE, basic_error("Generating a random password")),
@@ -187,6 +205,13 @@ impl IntoResponse for DenimError {
                     "Trying to create a new student with either no houses and or tutor groups to add them to",
                 ),
             ),
+            Self::Multipart { source } => (source.status(), basic_error(&source.body_text())),
+            Self::Email { .. } => (ISE, basic_error("Trying to parse an email address")),
+            Self::Zip { .. } => (ISE, basic_error("Dealing with ZIP files")),
+            Self::Csv { .. } => (ISE, basic_error("Dealing with CSV files")),
+            Self::S3Creds { .. } | Self::S3 { .. } => {
+                (ISE, basic_error("Dealing with S3 credentials"))
+            }
         };
 
         error!(?self, "Error!");

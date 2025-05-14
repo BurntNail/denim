@@ -5,6 +5,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use axum_login::{AuthnBackend, UserId};
+use email_address::EmailAddress;
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
 
@@ -23,7 +24,7 @@ impl DenimAuthBackend {
 
 pub enum DenimAuthCredentials {
     EmailPassword {
-        email: String,
+        email: EmailAddress,
         password: SecretString,
     },
 }
@@ -42,10 +43,13 @@ impl AuthnBackend for DenimAuthBackend {
 
         match creds {
             DenimAuthCredentials::EmailPassword { email, password } => {
-                let Some(id) = sqlx::query!("SELECT id FROM public.users WHERE email = $1", email)
-                    .fetch_optional(&mut *conn)
-                    .await
-                    .context(MakeQuerySnafu)?
+                let Some(id) = sqlx::query!(
+                    "SELECT id FROM public.users WHERE email = $1",
+                    email.as_str()
+                )
+                .fetch_optional(&mut *conn)
+                .await
+                .context(MakeQuerySnafu)?
                 else {
                     return Ok(None);
                 };

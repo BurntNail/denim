@@ -41,7 +41,7 @@ pub trait DataType: Sized {
         conn: &mut PgConnection,
     ) -> DenimResult<Vec<Self>> {
         let iter = ids.into_iter();
-        
+
         let mut all = Vec::with_capacity(iter.size_hint().0);
         for id in iter {
             if let Some(next_event) = Self::get_from_db_by_id(id, conn).await? {

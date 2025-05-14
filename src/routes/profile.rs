@@ -179,7 +179,7 @@ fn get_edit_password_form(errors: ValidationError) -> Markup {
         (title("Change Password"))
 
         @if !errors.is_empty() {
-            (errors_list(errors.as_nice_list()))
+            (errors_list(None, errors.as_nice_list()))
         }
 
         form hx-post="/internal/profile/edit_password" hx-trigger="submit" class="p-4" hx-target="#form_contents" {
@@ -209,7 +209,7 @@ fn get_one_item_form(
         (title(form_title))
 
         @if !errors.is_empty() {
-            (errors_list(errors.as_nice_list()))
+            (errors_list(None, errors.as_nice_list()))
         }
 
         form hx-post=(action) hx-trigger="submit" hx-target="#form_contents" class="p-4" {
@@ -264,7 +264,7 @@ pub async fn internal_get_profile_edit_email(session: DenimSession) -> DenimResu
     Ok(get_one_item_form(
         "/internal/profile/edit_email",
         "Change Email",
-        &user.email,
+        user.email.as_str(),
         "Email",
         Some("email"),
         true,
@@ -291,7 +291,6 @@ bitflags! {
         const PASSWORDS_NOT_MATCH =        0b0000_0010;
         const CURRENT_PASSWORD_INCORRECT = 0b0000_0100;
         const ALREADY_TAKEN_EMAIL =        0b0000_1000;
-        const INVALID_EMAIL =              0b0001_0000;
         const SAME_AS_BEFORE =             0b0010_0000;
     }
 }
@@ -303,7 +302,6 @@ impl ValidationError {
             Self::PASSWORDS_NOT_MATCH => Some("Provided passwords do not match"),
             Self::CURRENT_PASSWORD_INCORRECT => Some("Provided current password was incorrect"),
             Self::ALREADY_TAKEN_EMAIL => Some("Provided email is already in use"),
-            Self::INVALID_EMAIL => Some("Provided email is invalid"),
             Self::SAME_AS_BEFORE => Some("Field was the same as before"),
             _ => None,
         })
@@ -596,24 +594,24 @@ pub async fn internal_post_profile_edit_surname(
     )
     .await
 }
+
+#[derive(Deserialize)]
+pub struct EmailForm {
+    email: EmailAddress,
+}
+
 pub async fn internal_post_profile_edit_email(
     session: DenimSession,
     State(state): State<DenimState>,
-    Form(SingleItemForm { item }): Form<SingleItemForm>,
+    Form(EmailForm { email }): Form<EmailForm>,
 ) -> DenimResult<Markup> {
     async fn change_email(
-        email: String,
+        email: EmailAddress,
         state: DenimState,
         mut current_user: User,
     ) -> Result<User, ValidationResult> {
-        if email.is_empty() {
-            return Err(ValidationResult::Invalid(ValidationError::EMPTY));
-        }
         let mut errors = ValidationError::empty();
 
-        if !EmailAddress::is_valid(&email) {
-            errors |= ValidationError::INVALID_EMAIL;
-        }
         if email == current_user.email {
             errors |= ValidationError::SAME_AS_BEFORE;
             //theoretically we can't get both lol tho
@@ -627,7 +625,7 @@ pub async fn internal_post_profile_edit_email(
 
         sqlx::query!(
             "UPDATE users SET email = $1 WHERE id = $2",
-            email,
+            email.as_str(),
             current_user.id
         )
         .execute(&mut *conn)
@@ -645,12 +643,12 @@ pub async fn internal_post_profile_edit_email(
     let backup_email = user.email.clone();
 
     handle_change_result(
-        change_email(item, state, user).await,
+        change_email(email, state, user).await,
         |e| {
             get_one_item_form(
                 "/internal/profile/edit_email",
                 "Change Email",
-                &backup_email,
+                backup_email.as_str(),
                 "Email",
                 None,
                 true,

@@ -2,22 +2,25 @@ use crate::{
     auth::PermissionsTarget,
     data::{
         DataType, IdForm,
-        student_groups::{TutorGroup, HouseGroup},
+        student_groups::{HouseGroup, TutorGroup},
     },
-    error::{BcryptSnafu, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
+    error::{
+        BcryptSnafu, DenimResult, EmailSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
+        MissingHouseGroupSnafu, MissingTutorGroupSnafu,
+    },
     maud_conveniences::title,
 };
 use axum_login::AuthUser;
 use bcrypt::DEFAULT_COST;
 use bitflags::bitflags;
+use email_address::EmailAddress;
 use futures::StreamExt;
 use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
-use std::sync::LazyLock;
+use std::{str::FromStr, sync::LazyLock};
 use uuid::Uuid;
-use crate::error::{MissingHouseGroupSnafu, MissingTutorGroupSnafu};
 
 #[derive(Debug, Clone)]
 pub enum UserKind {
@@ -37,7 +40,7 @@ pub struct User {
     pub first_name: String,
     pub pref_name: Option<String>,
     pub surname: String,
-    pub email: String,
+    pub email: EmailAddress,
     pub bcrypt_hashed_password: Option<SecretString>,
     pub access_token: Option<SecretString>,
     pub current_password_is_default: bool,
@@ -48,7 +51,7 @@ pub struct AddPersonForm {
     pub first_name: String,
     pub pref_name: String,
     pub surname: String,
-    pub email: String,
+    pub email: EmailAddress,
     pub password: Option<SecretString>,
     pub current_password_is_default: bool,
     pub user_kind: AddUserKind,
@@ -94,12 +97,20 @@ impl DataType for User {
                 .await
                 .context(MakeQuerySnafu)?
         {
-            let tutor_group = 
-                Box::pin(TutorGroup::get_from_db_by_id(record.tutor_group_id, &mut *conn))
-                    .await
-                    ?.context(MissingTutorGroupSnafu {id: record.tutor_group_id})?;
-            let house = HouseGroup::get_from_db_by_id(record.house_id, &mut *conn).await?.context(MissingHouseGroupSnafu {id: record.house_id})?; 
-            
+            let tutor_group = Box::pin(TutorGroup::get_from_db_by_id(
+                record.tutor_group_id,
+                &mut *conn,
+            ))
+            .await?
+            .context(MissingTutorGroupSnafu {
+                id: record.tutor_group_id,
+            })?;
+            let house = HouseGroup::get_from_db_by_id(record.house_id, &mut *conn)
+                .await?
+                .context(MissingHouseGroupSnafu {
+                    id: record.house_id,
+                })?;
+
             let events_participated = sqlx::query!(
                 "SELECT event_id FROM public.participation WHERE student_id = $1",
                 id
@@ -120,12 +131,14 @@ impl DataType for User {
             UserKind::User
         };
 
+        let email = EmailAddress::from_str(&most_bits.email).context(EmailSnafu)?;
+
         Ok(Some(Self {
             id,
             first_name: most_bits.first_name,
             pref_name: most_bits.pref_name,
             surname: most_bits.surname,
-            email: most_bits.email,
+            email,
             bcrypt_hashed_password: most_bits.bcrypt_hashed_password.map(SecretString::from),
             access_token: most_bits.access_token.map(SecretString::from),
             current_password_is_default: most_bits.current_password_is_default,
@@ -178,8 +191,8 @@ impl DataType for User {
         };
 
         let id = sqlx::query!(
-            "INSERT INTO public.users (first_name, pref_name, surname, email, bcrypt_hashed_password, current_password_is_default) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-            first_name, pref_name, surname, email, bcrypt_hashed_password, current_password_is_default)
+            "INSERT INTO public.users (first_name, pref_name, surname, email, bcrypt_hashed_password, current_password_is_default) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (email) DO UPDATE SET first_name = $1, pref_name = $2, surname = $3, bcrypt_hashed_password = $5, current_password_is_default = $6 RETURNING id",
+            first_name, pref_name, surname, email.as_str(), bcrypt_hashed_password, current_password_is_default)
             .fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id;
         match user_kind {
             AddUserKind::Student { tutor_group, house } => {
@@ -275,10 +288,13 @@ impl User {
 
 impl Render for User {
     fn render_to(&self, buffer: &mut String) {
-        let first_part = self.pref_name.as_deref().unwrap_or(self.first_name.as_str());
+        let first_part = self
+            .pref_name
+            .as_deref()
+            .unwrap_or(self.first_name.as_str());
         let second_part = self.surname.as_str();
-        
-        if matches!(self.kind, UserKind::Student {..}) {
+
+        if matches!(self.kind, UserKind::Student { .. }) {
             buffer.push_str(first_part);
             buffer.push(' ');
             buffer.push_str(&second_part[0..1]);

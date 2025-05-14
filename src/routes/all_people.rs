@@ -1,13 +1,12 @@
-use std::collections::HashMap;
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{
         DataType, IdForm,
-        student_groups::{TutorGroup, HouseGroup},
+        student_groups::{HouseGroup, TutorGroup},
         user::{AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{DenimError, DenimResult, NoHousesOrNoTutorGroupsSnafu},
-    maud_conveniences::{Email, form_element, simple_form_element, title},
+    maud_conveniences::{Email, errors_list, form_element, simple_form_element, title},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -18,9 +17,11 @@ use axum::{
     http::Response,
     response::{IntoResponse, Redirect},
 };
+use email_address::EmailAddress;
 use maud::{Markup, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
+use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
 
 #[axum::debug_handler]
@@ -92,7 +93,8 @@ pub async fn internal_get_add_student_form(
     let tutor_groups = TutorGroup::get_all(&state).await?;
     let houses = HouseGroup::get_all(&state).await?;
 
-    let house_names_by_id: HashMap<i32, String> = houses.clone()
+    let house_names_by_id: HashMap<i32, String> = houses
+        .clone()
         .into_iter()
         .map(|hg| (hg.id, hg.name))
         .collect();
@@ -144,7 +146,7 @@ pub struct NewStaffOrDevForm {
     pref_name: String,
     surname: String,
     email: String,
-    generate_password: String,
+    generate_password: Option<String>,
     is_staff: bool,
 }
 
@@ -154,13 +156,26 @@ pub async fn internal_put_new_staff_or_dev(
     Form(form): Form<NewStaffOrDevForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
-    let user_kind = if form.is_staff && session.can(PermissionsTarget::CRUD_ADMINS) {
+
+    let is_staff = form.is_staff && session.can(PermissionsTarget::CRUD_ADMINS);
+    let user_kind = if is_staff {
         AddUserKind::Staff
     } else {
         AddUserKind::Dev
     };
 
-    let password = if &form.generate_password == "on" {
+    //TODO: proper validation for this and new student
+    let email = match EmailAddress::from_str(&form.email) {
+        Ok(e) => e,
+        Err(e) => {
+            return Ok(errors_list(
+                Some("Email Errors"),
+                std::iter::once(format!("{e:?}")),
+            ));
+        }
+    };
+
+    let password = if form.generate_password.is_some_and(|gp| &gp == "on") {
         state
             .config()
             .auth_config()
@@ -175,25 +190,16 @@ pub async fn internal_put_new_staff_or_dev(
         first_name: form.first_name,
         pref_name: form.pref_name,
         surname: form.surname,
-        email: form.email,
+        email,
         password: password.clone(),
         current_password_is_default: true,
         user_kind,
     };
 
-    let id =
-        User::insert_into_database(add_person_form, &mut *state.get_connection().await?).await?;
+    User::insert_into_database(add_person_form, &mut *state.get_connection().await?).await?;
     state.send_sse_event(SseEvent::CrudPerson);
 
-    internal_get_person_in_detail(
-        State(state.clone()),
-        session,
-        Query(InDetailForm {
-            id,
-            new_password: password,
-        }),
-    )
-    .await
+    internal_get_add_dev_or_staff_form(session, Query(IsStaffQuery { is_staff })).await
 }
 
 #[derive(Deserialize)]
@@ -202,7 +208,7 @@ pub struct NewStudentForm {
     pref_name: String,
     surname: String,
     email: String,
-    generate_password: String,
+    generate_password: Option<String>,
     tutor_group: Uuid,
     house: i32,
 }
@@ -213,7 +219,7 @@ pub async fn internal_put_new_student(
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
 
-    let password = if &form.generate_password == "on" {
+    let password = if form.generate_password.is_some_and(|gp| &gp == "on") {
         state
             .config()
             .auth_config()
@@ -224,11 +230,22 @@ pub async fn internal_put_new_student(
         None
     };
 
+    //TODO: proper validation for this and new student
+    let email = match EmailAddress::from_str(&form.email) {
+        Ok(e) => e,
+        Err(e) => {
+            return Ok(errors_list(
+                Some("Email Errors"),
+                std::iter::once(format!("{e:?}")),
+            ));
+        }
+    };
+
     let add_person_form = AddPersonForm {
         first_name: form.first_name,
         pref_name: form.pref_name,
         surname: form.surname,
-        email: form.email,
+        email,
         password: password.clone(),
         current_password_is_default: true,
         user_kind: AddUserKind::Student {

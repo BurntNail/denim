@@ -27,6 +27,7 @@ pub struct AddEventForm {
     pub date: String,
     pub location: String,
     pub extra_info: String,
+    ///actually a UUID, but here to allow for empty or whatever
     pub associated_staff_member: String,
 }
 

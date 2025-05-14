@@ -13,6 +13,10 @@ use crate::{
             internal_get_add_student_form, internal_get_people, internal_get_person_in_detail,
             internal_put_new_staff_or_dev, internal_put_new_student,
         },
+        event_in_detail::get_event,
+        import_export::{
+            get_import_export_page, get_students_import_checker, put_add_new_draft_students,
+        },
         index::get_index_route,
         login::{get_login, post_login, post_logout},
         new_admin_flow::{get_create_new_admin, post_add_new_admin},
@@ -31,7 +35,7 @@ use crate::{
 };
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use axum_login::{
     AuthManagerLayerBuilder,
@@ -42,7 +46,6 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use crate::routes::event_in_detail::get_event;
 
 #[macro_use]
 extern crate tracing;
@@ -96,6 +99,15 @@ async fn main() {
         .route(
             "/replace_default_password",
             get(get_replace_default_password).post(post_replace_default_password),
+        )
+        .route("/import_export", get(get_import_export_page))
+        .route(
+            "/import_export/import_people",
+            put(put_add_new_draft_students),
+        )
+        .route(
+            "/import_export/import_people_fetch",
+            get(get_students_import_checker),
         )
         .route(
             "/onboarding/create_admin_acc",

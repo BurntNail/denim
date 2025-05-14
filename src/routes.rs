@@ -1,9 +1,10 @@
 pub mod all_events;
 pub mod all_people;
+pub mod event_in_detail;
+pub mod import_export;
 pub mod index;
 pub mod login;
 pub mod new_admin_flow;
 pub mod profile;
 pub mod set_new_password;
 pub mod sse;
-pub mod event_in_detail;

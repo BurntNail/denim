@@ -1,15 +1,12 @@
-use futures::StreamExt;
 use crate::{
-    data::{DataType, IntIdForm},
-    error::{DenimResult, MakeQuerySnafu},
+    data::{DataType, IdForm, IntIdForm, user::User},
+    error::{DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu, MissingUserSnafu},
 };
+use futures::StreamExt;
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
-use crate::data::IdForm;
-use crate::data::user::User;
-use crate::error::{GetDatabaseConnectionSnafu, MissingUserSnafu};
 
 #[derive(Debug, Clone)]
 pub struct TutorGroup {
@@ -33,12 +30,15 @@ impl DataType for TutorGroup {
         let Some(rec) = sqlx::query!("SELECT * FROM public.tutor_groups WHERE id = $1", id)
             .fetch_optional(&mut *conn)
             .await
-            .context(MakeQuerySnafu)? else {
-            return Ok(None)
+            .context(MakeQuerySnafu)?
+        else {
+            return Ok(None);
         };
-        
-        let staff_member = User::get_from_db_by_id(rec.staff_id, conn).await?.context(MissingUserSnafu {id: rec.staff_id})?;
-        
+
+        let staff_member = User::get_from_db_by_id(rec.staff_id, conn)
+            .await?
+            .context(MissingUserSnafu { id: rec.staff_id })?;
+
         Ok(Some(Self {
             id,
             staff_member: Box::new(staff_member),
@@ -58,17 +58,27 @@ impl DataType for TutorGroup {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
-    async fn insert_into_database(to_be_added: Self::FormForAdding, conn: &mut PgConnection) -> DenimResult<Self::Id> {
-        let id = sqlx::query!("INSERT INTO public.tutor_groups (staff_id, house_id) VALUES ($1, $2) RETURNING id", to_be_added.staff_id, to_be_added.house_id)
-            .fetch_one(conn)
-            .await
-            .context(MakeQuerySnafu)?;
-        
+    async fn insert_into_database(
+        to_be_added: Self::FormForAdding,
+        conn: &mut PgConnection,
+    ) -> DenimResult<Self::Id> {
+        let id = sqlx::query!(
+            "INSERT INTO public.tutor_groups (staff_id, house_id) VALUES ($1, $2) RETURNING id",
+            to_be_added.staff_id,
+            to_be_added.house_id
+        )
+        .fetch_one(conn)
+        .await
+        .context(MakeQuerySnafu)?;
+
         Ok(id.id)
     }
 
     async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()> {
-        sqlx::query!("DELETE FROM public.tutor_groups WHERE id = $1", id).execute(conn).await.context(MakeQuerySnafu)?;
+        sqlx::query!("DELETE FROM public.tutor_groups WHERE id = $1", id)
+            .execute(conn)
+            .await
+            .context(MakeQuerySnafu)?;
         Ok(())
     }
 }
