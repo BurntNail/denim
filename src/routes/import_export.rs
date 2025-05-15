@@ -33,6 +33,7 @@ use std::{
     io::{Cursor, Write},
     time::Duration,
 };
+use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
 
@@ -52,6 +53,21 @@ pub async fn get_import_export_page(
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::EXPORT_CSVS)?;
     let can_import = session.can(PermissionsTarget::IMPORT_CSVS);
+
+    let job_already_running = if state.student_job_is_actually_running().await {
+        Some(
+            get_students_import_checker(
+                State(state.clone()),
+                session.clone(),
+                Query(ImportCheckerQuery {
+                    dots: String::new(),
+                }),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
 
     Ok(state.render(session, html!{
         div class="mx-auto flex flex-row justify-center p-2 m-2 rounded gap-x-8" {
@@ -105,30 +121,31 @@ pub async fn get_import_export_page(
                 } */
 
                 @if can_import {
-                    div class="overflow-scroll overflow-clip" {
-                        h3 class="text-xl font-semibold mb-4" {"Import People"}
-
-                        div id="import_people_forms" {
-                            (table(
-                                subsubtitle("CSV Format"),
-                                ["Column", "Example", "Required"],
-                                vec![
-                                    ["first_name", "Jackson", "✅"],
-                                    ["pref_name", "Jack", "❌"],
-                                    ["surname", "Programmerson", "✅"],
-                                    ["email", "jack@example.org", "✅"],
-                                    ["house", "Lion", "✅"],
-                                    ["tutor_email", "tutor@example.org", "✅"]
-                                ]
-                            ))
-                            p class="italic" {"NB: Missing houses, tutors and tutor groups are auto-magically added."}
-                            br;
-
-                            form hx-put="/import_export/import_people" hx-swap="innerHTML" hx-target="#import_people_forms" hx-encoding="multipart/form-data" {
-                                label for="people_csv" class="block text-sm font-medium text-gray-400 mb-2" {"Upload People CSV"}
-                                input multiple type="file" name="people_csv" id="people_csv" accept=".csv" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 mb-4";
-
-                                (form_submit_button(Some("Import People")))
+                    @if let Some(job_already_running) = job_already_running {
+                        (job_already_running)
+                    } @else {
+                        div class="overflow-scroll overflow-clip" {
+                            h3 class="text-xl font-semibold mb-4" {"Import People"}
+                            div id="import_people_forms" {
+                                (table(
+                                    subsubtitle("CSV Format"),
+                                    ["Column", "Example", "Required"],
+                                    vec![
+                                        ["first_name", "Jackson", "✅"],
+                                        ["pref_name", "Jack", "❌"],
+                                        ["surname", "Programmerson", "✅"],
+                                        ["email", "jack@example.org", "✅"],
+                                        ["house", "Lion", "✅"],
+                                        ["tutor_email", "tutor@example.org", "✅"]
+                                    ]
+                                ))
+                                p class="italic" {"NB: Missing houses, tutors and tutor groups are auto-magically added."}
+                                br;
+                                form hx-put="/import_export/import_people" hx-swap="innerHTML" hx-target="#import_people_forms" hx-encoding="multipart/form-data" {
+                                    label for="people_csv" class="block text-sm font-medium text-gray-400 mb-2" {"Upload People CSV"}
+                                    input multiple type="file" name="people_csv" id="people_csv" accept=".csv" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 mb-4";
+                                    (form_submit_button(Some("Import People")))
+                                }
                             }
                         }
                     }
@@ -327,7 +344,6 @@ pub async fn put_add_new_students(
             State(state),
             session,
             Query(ImportCheckerQuery {
-                n: None,
                 dots: String::new(),
             }),
         )
@@ -448,6 +464,8 @@ pub async fn put_add_new_students(
 
     transaction.commit().await.context(CommitTransactionSnafu)?; //commit the new houses
 
+    students_to_add.sort_by_cached_key(|student| student.email.to_string());
+
     let (passwords, csv_password) = {
         #[allow(clippy::significant_drop_tightening)]
         let auth_config = state.config().auth_config().await;
@@ -461,8 +479,8 @@ pub async fn put_add_new_students(
 
         (passwords, csv_password)
     };
-
     let num_students = students_to_add.len();
+    let (tx, rx) = channel((0, num_students));
 
     let task = tokio::task::spawn({
         let state = state.clone();
@@ -472,16 +490,19 @@ pub async fn put_add_new_students(
             let mut pg_connection = state.get_transaction().await?;
 
             for (
-                DraftIndividualStudent {
-                    first_name,
-                    pref_name,
-                    surname,
-                    email,
-                    house,
-                    tutor_group,
-                },
-                password,
-            ) in students_to_add.into_iter().zip(passwords)
+                i,
+                (
+                    DraftIndividualStudent {
+                        first_name,
+                        pref_name,
+                        surname,
+                        email,
+                        house,
+                        tutor_group,
+                    },
+                    password,
+                ),
+            ) in students_to_add.into_iter().zip(passwords).enumerate()
             {
                 if let Err(e) = User::insert_into_database(
                     AddPerson {
@@ -507,6 +528,8 @@ pub async fn put_add_new_students(
 
                 write!(&mut output_csv, "\n{email},{password}")
                     .expect("unable to add passwords to zip file");
+
+                let _ = tx.send((i + 1, num_students));
             }
 
             if !errors.is_empty() {
@@ -558,7 +581,7 @@ pub async fn put_add_new_students(
             pg_connection
                 .commit()
                 .await
-                .context(CommitTransactionSnafu)?;
+                .context(CommitTransactionSnafu)?; //ensure we only commit when we can defo send everything back to the user :)
             state.send_sse_event(SseEvent::CrudPerson);
 
             Ok(html! {
@@ -571,12 +594,11 @@ pub async fn put_add_new_students(
         }
     });
 
-    job_submitter_token.submit_job(task).await;
+    job_submitter_token.submit_job(task, rx).await;
     get_students_import_checker(
         State(state),
         session,
         Query(ImportCheckerQuery {
-            n: Some(num_students),
             dots: String::new(),
         }),
     )
@@ -585,21 +607,17 @@ pub async fn put_add_new_students(
 
 #[derive(Deserialize)]
 pub struct ImportCheckerQuery {
-    n: Option<usize>,
     dots: String,
 }
 
 pub async fn get_students_import_checker(
     State(state): State<DenimState>,
     session: DenimSession,
-    Query(ImportCheckerQuery {
-        n: num_students,
-        dots,
-    }): Query<ImportCheckerQuery>,
+    Query(ImportCheckerQuery { dots }): Query<ImportCheckerQuery>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::IMPORT_CSVS)?;
 
-    if !state.student_job_exists() {
+    if !state.student_job_token_exists() {
         tokio::time::sleep(Duration::from_millis(1000)).await;
         return Ok(errors_list(
             Some("No Import Job Exists"),
@@ -617,28 +635,38 @@ pub async fn get_students_import_checker(
         "..." => "",
         _ => ".",
     };
-    let fmt_num_students =
-        num_students.map_or_else(|| "an unknown number of".to_string(), |n| n.to_string());
 
     let hx_vals = html! {
         "{"
-        @if let Some(n) = num_students {
-            "\"n\": " (n) ", "
-        }
         "\"dots\": \"" (dots) "\""
         "}"
     };
 
+    let fmt_n_students = if let Some((done, total)) = state.check_students_job_progress().await {
+        html! {
+            p {
+                "So far, added " (done) " student"
+                @if done != 1 {
+                    "s"
+                }
+                " out of " (total) " to the database."
+            }
+        }
+    } else {
+        html! {
+            p {
+                "Currently adding student(s) to the database" (dots);
+            }
+        }
+    };
+
     Ok(html! {
         div hx-get="/import_export/import_people_fetch" hx-vals=(hx_vals) hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML" {
-            div class="flex items-center justify-center p-4 m-4 shadow rounded" {
-                p {
-                    "Currently adding " (fmt_num_students) " student(s) to the database" (dots);
-                }
+            div class="flex flex-col items-center justify-center p-4 m-4 shadow rounded" {
+                p {"Now securing passwords" (dots)}
+                (fmt_n_students)
                 br;
-                p {
-                    "Don't close this tab until this finishes! You should allow approximately 1s per student added."
-                }
+                p {"If you close this tab, remember to re-open it later to save the passwords!"}
             }
         }
     })

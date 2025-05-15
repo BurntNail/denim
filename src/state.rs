@@ -18,6 +18,7 @@ use tokio::{
     sync::{
         Mutex,
         broadcast::{Receiver, Sender, channel},
+        watch::Receiver as WatchRx,
     },
     task::JoinHandle,
 };
@@ -29,7 +30,8 @@ pub struct DenimState {
     pool: Pool<Postgres>,
     config: RuntimeConfiguration,
     sse_events_sender: Sender<SseEvent>,
-    import_students_job: Arc<Mutex<Option<LongJobResult>>>,
+    #[allow(clippy::type_complexity)]
+    import_students_job: Arc<Mutex<Option<(LongJobResult, WatchRx<(usize, usize)>)>>>,
     submit_students_job_token: Arc<AtomicBool>,
 }
 
@@ -39,8 +41,8 @@ pub struct SubmitStudentsJobToken {
 }
 
 impl SubmitStudentsJobToken {
-    pub async fn submit_job(mut self, job: LongJobResult) {
-        *self.state.import_students_job.lock().await = Some(job);
+    pub async fn submit_job(mut self, job: LongJobResult, rx: WatchRx<(usize, usize)>) {
+        *self.state.import_students_job.lock().await = Some((job, rx));
         self.has_submitted = true;
     }
 }
@@ -79,13 +81,13 @@ impl DenimState {
         let mut lock = self.import_students_job.lock().await;
 
         let mut is_finished = false;
-        if let Some(job) = lock.as_mut() {
+        if let Some((job, _rx)) = lock.as_mut() {
             is_finished = job.is_finished();
         }
 
         if is_finished {
             //looks like there's no other way of doing this, because we only want to take it if it's finished
-            let job = lock.take().expect("just checked for it");
+            let (job, _rx) = lock.take().expect("just checked for it");
             drop(lock);
 
             self.submit_students_job_token
@@ -97,6 +99,20 @@ impl DenimState {
         }
     }
 
+    pub async fn check_students_job_progress(&self) -> Option<(usize, usize)> {
+        let mut lock = self.import_students_job.lock().await;
+        let (_job, rx) = lock.as_mut()?;
+        Some(*rx.borrow_and_update())
+    }
+
+    pub fn student_job_token_exists(&self) -> bool {
+        self.submit_students_job_token.load(Ordering::SeqCst)
+    }
+
+    pub async fn student_job_is_actually_running(&self) -> bool {
+        self.import_students_job.lock().await.is_some()
+    }
+
     pub fn get_submit_students_job_token(&self) -> Option<SubmitStudentsJobToken> {
         if self.submit_students_job_token.swap(true, Ordering::SeqCst) {
             None
@@ -106,10 +122,6 @@ impl DenimState {
                 has_submitted: false,
             })
         }
-    }
-
-    pub fn student_job_exists(&self) -> bool {
-        self.submit_students_job_token.load(Ordering::SeqCst)
     }
 
     #[allow(clippy::unused_self, clippy::needless_pass_by_value)] //in case self is ever needed :), and to allow direct html! usage
