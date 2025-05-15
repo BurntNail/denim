@@ -15,7 +15,8 @@ use crate::{
         },
         event_in_detail::get_event,
         import_export::{
-            get_import_export_page, get_students_import_checker, put_add_new_draft_students,
+            get_import_export_page, get_students_import_checker, put_add_new_events,
+            put_add_new_students, put_fully_import_events,
         },
         index::get_index_route,
         login::{get_login, post_login, post_logout},
@@ -102,9 +103,11 @@ async fn main() {
             get(get_replace_default_password).post(post_replace_default_password),
         )
         .route("/import_export", get(get_import_export_page))
+        .route("/import_export/import_people", put(put_add_new_students))
+        .route("/import_export/import_events", put(put_add_new_events))
         .route(
-            "/import_export/import_people",
-            put(put_add_new_draft_students),
+            "/import_export/fully_import_events",
+            put(put_fully_import_events),
         )
         .route(
             "/import_export/import_people_fetch",

@@ -1,9 +1,13 @@
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
-    data::{DataType, IdForm, event::Event, user::User},
-    error::{DenimError, DenimResult},
+    data::{
+        DataType, FilterQuery, IdForm,
+        event::{AddEvent, Event},
+        user::User,
+    },
+    error::{DenimError, DenimResult, ParseTimeSnafu, ParseUuidSnafu},
     maud_conveniences::{
-        escape, form_element, form_submit_button, simple_form_element, table,
+        escape, form_element, form_submit_button, simple_form_element, table, title,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -12,9 +16,11 @@ use axum::{
     Form,
     extract::{Query, State},
 };
+use chrono::NaiveDateTime;
 use maud::{Markup, html};
-use crate::data::FilterQuery;
-use crate::maud_conveniences::title;
+use serde::Deserialize;
+use snafu::ResultExt;
+use uuid::Uuid;
 
 #[axum::debug_handler]
 pub async fn get_events(State(state): State<DenimState>, session: DenimSession) -> Markup {
@@ -70,13 +76,60 @@ pub async fn internal_get_add_events_form(
     })
 }
 
+#[derive(Deserialize)]
+pub struct NewEventForm {
+    name: String,
+    date: String,
+    location: String,
+    extra_info: String,
+    associated_staff_member: String,
+}
+
 pub async fn put_new_event(
     State(state): State<DenimState>,
     session: DenimSession,
-    Form(add_event_form): Form<<Event as DataType>::FormForAdding>,
+    Form(NewEventForm {
+        name,
+        date,
+        location,
+        extra_info,
+        associated_staff_member,
+    }): Form<NewEventForm>,
 ) -> DenimResult<Markup> {
-    let id =
-        Event::insert_into_database(add_event_form, &mut *state.get_connection().await?).await?;
+    let date = NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M")
+        .context(ParseTimeSnafu { original: date })?;
+
+    let location = if location.is_empty() {
+        None
+    } else {
+        Some(location)
+    };
+    let extra_info = if extra_info.is_empty() {
+        None
+    } else {
+        Some(extra_info)
+    };
+    let associated_staff_member = if associated_staff_member.is_empty() {
+        None
+    } else {
+        Some(
+            Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu {
+                original: associated_staff_member,
+            })?,
+        )
+    };
+
+    let id = Event::insert_into_database(
+        AddEvent {
+            name,
+            date,
+            location,
+            extra_info,
+            associated_staff_member,
+        },
+        &mut *state.get_connection().await?,
+    )
+    .await?;
     state.send_sse_event(SseEvent::CrudEvent);
 
     let this_event =
@@ -161,7 +214,10 @@ pub async fn internal_get_event_in_detail(
     })
 }
 
-pub async fn internal_get_events(State(state): State<DenimState>, Query(FilterQuery {filter}): Query<FilterQuery>) -> DenimResult<Markup> {
+pub async fn internal_get_events(
+    State(state): State<DenimState>,
+    Query(FilterQuery { filter }): Query<FilterQuery>,
+) -> DenimResult<Markup> {
     let events = Event::get_all(&state).await?
         .into_iter()
         .filter(|event| filter.as_ref().is_none_or(|filter| event.name.contains(filter)))
@@ -183,15 +239,15 @@ pub async fn internal_get_events(State(state): State<DenimState>, Query(FilterQu
             ]
         })
         .collect();
-    
+
     Ok(table(
-        html!{
+        html! {
             (title("Events"))
             div class="flex rounded p-4 m-4" {
                 input value=[filter] type="search" name="filter" placeholder="Begin Typing To Search Events..." hx-get="/internal/get_events" hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#all_events" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
             }
         },
-        ["Name", "Date", "Location",],
-        events
+        ["Name", "Date", "Location"],
+        events,
     ))
 }

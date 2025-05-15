@@ -2,9 +2,9 @@ use crate::{
     auth::DenimSession,
     data::{
         DataType,
-        user::{AddPersonForm, AddUserKind, User},
+        user::{AddPerson, AddUserKind, User},
     },
-    error::{DenimResult, MakeQuerySnafu},
+    error::{CommitTransactionSnafu, DenimResult, MakeQuerySnafu},
     maud_conveniences::{errors_list, form_submit_button, simple_form_element, supertitle},
     state::DenimState,
 };
@@ -20,7 +20,6 @@ use maud::html;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-
 //flow:
 // 1. create account
 // done :)
@@ -154,7 +153,7 @@ pub async fn post_add_new_admin(
     }
 
     let id = User::insert_into_database(
-        AddPersonForm {
+        AddPerson {
             first_name,
             pref_name,
             surname,
@@ -170,7 +169,7 @@ pub async fn post_add_new_admin(
     let user = User::get_from_db_by_id(id, &mut conn)
         .await?
         .expect("just added user to the database w/o issue");
-    conn.commit().await.context(MakeQuerySnafu)?;
+    conn.commit().await.context(CommitTransactionSnafu)?;
 
     session.login(&user).await?;
 

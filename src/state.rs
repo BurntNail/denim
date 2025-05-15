@@ -48,7 +48,9 @@ impl SubmitStudentsJobToken {
 impl Drop for SubmitStudentsJobToken {
     fn drop(&mut self) {
         if !self.has_submitted {
-            self.state.submit_students_job_token.store(false, Ordering::SeqCst);
+            self.state
+                .submit_students_job_token
+                .store(false, Ordering::SeqCst);
         }
     }
 }
@@ -99,7 +101,10 @@ impl DenimState {
         if self.submit_students_job_token.swap(true, Ordering::SeqCst) {
             None
         } else {
-            Some(SubmitStudentsJobToken { state: self.clone(), has_submitted: false })
+            Some(SubmitStudentsJobToken {
+                state: self.clone(),
+                has_submitted: false,
+            })
         }
     }
 

@@ -9,7 +9,7 @@ use crate::{
     },
     error::{BcryptSnafu, DenimError, DenimResult, MakeQuerySnafu, UnableToFindUserInfoSnafu},
     maud_conveniences::{
-        Email, errors_list, form_submit_button, simple_form_element, table, supertitle,
+        Email, errors_list, form_submit_button, simple_form_element, subtitle, supertitle, table,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -28,7 +28,6 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::{OptionExt, ResultExt};
-use crate::maud_conveniences::subtitle;
 
 pub async fn get_profile(
     State(state): State<DenimState>,

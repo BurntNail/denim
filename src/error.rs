@@ -15,40 +15,42 @@ pub type DenimResult<T> = Result<T, DenimError>;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
 pub enum DenimError {
-    #[snafu(display("Error opening database: {}", source))]
+    #[snafu(display("Error opening database"))]
     OpenDatabase { source: sqlx::Error },
-    #[snafu(display("Error getting db connection: {}", source))]
+    #[snafu(display("Error getting db connection"))]
     GetDatabaseConnection { source: sqlx::Error },
-    #[snafu(display("Error making query: {}", source))]
+    #[snafu(display("Error making SQL query"))]
     MakeQuery { source: sqlx::Error },
-    #[snafu(display("Error migrating DB schema: {}", source))]
+    #[snafu(display("Error commiting SQL transaction"))]
+    CommitTransaction { source: sqlx::Error },
+    #[snafu(display("Error rolling back SQL transaction"))]
+    RollbackTransaction { source: sqlx::Error },
+    #[snafu(display("Error migrating DB schema"))]
     MigrateError { source: sqlx::migrate::MigrateError },
     #[snafu(display("Error converting {} to `chrono::NaiveDateTime`", odt))]
     InvalidDateTime { odt: OffsetDateTime },
-    #[snafu(display(
-        "Error converting {} to `time::OffsetDateTime` because {}",
-        utc_dt,
-        source
-    ))]
+    #[snafu(display("Error converting {} to `time::OffsetDateTime`", utc_dt,))]
     InvalidChronoDateTime {
         source: ComponentRange,
         utc_dt: DateTime<Utc>,
     },
-    #[snafu(display("Error serialising with rmp_serde: {}", source))]
+    #[snafu(display("Error serialising with rmp_serde"))]
     RmpSerdeEncode { source: rmp_serde::encode::Error },
-    #[snafu(display("Unable to retrieve env var {} because of {}", name, source))]
+    #[snafu(display("Error deserialising with rmp_serde"))]
+    RmpSerdeDecode { source: rmp_serde::decode::Error },
+    #[snafu(display("Unable to retrieve env var `{}`", name))]
     BadEnvVar {
         source: dotenvy::Error,
         name: &'static str,
     },
-    #[snafu(display("Unable to parse port because {}", source))]
+    #[snafu(display("Unable to parse IP port"))]
     ParsePort { source: ParseIntError },
-    #[snafu(display("Unable to parse date {:?} because of {}", original, source))]
+    #[snafu(display("Unable to parse date {:?}", original))]
     ParseTime {
         source: chrono::ParseError,
         original: String,
     },
-    #[snafu(display("Unable to parse uuid {:?} because of {}", original, source))]
+    #[snafu(display("Unable to parse uuid {:?}", original))]
     ParseUuid {
         source: uuid::Error,
         original: String,
@@ -61,9 +63,9 @@ pub enum DenimError {
     MissingHouseGroup { id: i32 },
     #[snafu(display("Unable to find tutor group with UUID: {}", id))]
     MissingTutorGroup { id: Uuid },
-    #[snafu(display("Error with bcrypt: {}", source))]
+    #[snafu(display("Error with hashing/password verification"))]
     Bcrypt { source: bcrypt::BcryptError },
-    #[snafu(display("Error with sessions: {}", source))]
+    #[snafu(display("Error with sessions"))]
     TowerSession {
         source: axum_login::tower_sessions::session::Error,
     },
@@ -82,22 +84,24 @@ pub enum DenimError {
         "Tried to get the new student form, but no houses and/or no tutor groups existed to add them into"
     ))]
     NoHousesOrNoTutorGroups,
-    #[snafu(display("Error with multipart form input: {}", source))]
+    #[snafu(display("Error with multipart form input"))]
     Multipart {
         source: axum::extract::multipart::MultipartError,
     },
-    #[snafu(display("Error parsing email address internally: {}", source))]
+    #[snafu(display("Error parsing email address"))]
     Email { source: email_address::Error },
-    #[snafu(display("Error with ZIPs: {}", source))]
+    #[snafu(display("Error with ZIPs"))]
     Zip { source: zip::result::ZipError },
-    #[snafu(display("Error with CSVs: {}", source))]
+    #[snafu(display("Error with CSVs"))]
     Csv { source: csv::Error },
-    #[snafu(display("Error with S3 Credentials: {}", source))]
+    #[snafu(display("Error with S3 Credentials"))]
     S3Creds {
         source: s3::creds::error::CredentialsError,
     },
-    #[snafu(display("Error with S3: {}", source))]
+    #[snafu(display("Error with S3"))]
     S3 { source: s3::error::S3Error },
+    #[snafu(display("Error decoding Base64"))]
+    B64 { source: base64::DecodeError },
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -110,7 +114,7 @@ impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
 }
 
 impl IntoResponse for DenimError {
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::match_same_arms)]
     fn into_response(self) -> Response {
         const ISE: StatusCode = StatusCode::INTERNAL_SERVER_ERROR; //internal server error
         const NF: StatusCode = StatusCode::NOT_FOUND; //not found
@@ -126,96 +130,41 @@ impl IntoResponse for DenimError {
             }
         };
 
-        let (error_code, error_ty_desc) = match &self {
-            Self::OpenDatabase { .. } => (ISE, basic_error("Opening Database")),
-            Self::GetDatabaseConnection { .. } => (ISE, basic_error("Making Database Connection")),
+        let status_code = match &self {
+            Self::OpenDatabase { .. } | Self::GetDatabaseConnection { .. } => ISE,
+            Self::MigrateError { .. } => ISE,
             Self::MakeQuery { source } => match source {
-                sqlx::Error::RowNotFound => (NF, basic_error("Database Item Not Found")),
-                _ => (ISE, basic_error("Querying Database")),
+                sqlx::Error::RowNotFound => NF,
+                _ => ISE,
             },
-            Self::MigrateError { .. } => (ISE, basic_error("Running Database Migrations")),
-            Self::InvalidDateTime { odt } => (
-                BI,
-                basic_error(&format!("Converting Date-Time Format, starting with {odt}")),
-            ),
-            Self::InvalidChronoDateTime { utc_dt, .. } => (
-                ISE,
-                basic_error(&format!(
-                    "Converting Date-Time Format, starting with {utc_dt}"
-                )),
-            ),
-            Self::RmpSerdeEncode { .. } => (ISE, basic_error("Serialising Session")),
-            Self::BadEnvVar { name, source } => match source {
-                dotenvy::Error::LineParse(_, _) => (
-                    ISE,
-                    basic_error(&format!("Parsing Environment Variable {name:?}")),
-                ),
-                dotenvy::Error::Io(_) => (ISE, basic_error("IO Error with `.env` file")),
-                dotenvy::Error::EnvVar(ev) => match ev {
-                    std::env::VarError::NotPresent => (
-                        ISE,
-                        basic_error(&format!("Environment Variable {ev:?} was not present")),
-                    ),
-                    std::env::VarError::NotUnicode(_) => (
-                        ISE,
-                        basic_error(&format!("Environment Variable {ev} was not unicode")),
-                    ),
-                },
-                _ => (
-                    ISE,
-                    basic_error(&format!("Error with Environment Variable {name:?}")),
-                ),
-            },
-            Self::ParsePort { .. } => (
-                ISE,
-                basic_error("Parsing port environment variable contents"),
-            ),
-            Self::ParseTime { .. } => (BI, basic_error("Parsing date-time from Form Data")),
-            Self::ParseUuid { .. } => (BI, basic_error("Parsing UUID from Form Data")),
-            Self::MissingEvent { id } => (
-                NF,
-                basic_error(&format!("Finding an event ({id}) in the DB")),
-            ),
-            Self::MissingUser { id } => {
-                (NF, basic_error(&format!("Finding a user ({id}) in the DB")))
-            }
-            Self::MissingHouseGroup { id } => (
-                NF,
-                basic_error(&format!("Finding a house ({id}) in the DB")),
-            ),
-            Self::MissingTutorGroup { id } => (
-                NF,
-                basic_error(&format!("Finding a tutor group ({id}) in the DB")),
-            ),
-            Self::Bcrypt { .. } => (ISE, basic_error("Hashing")),
-            Self::TowerSession { .. } => (ISE, basic_error("Dealing with Session Management")),
-            Self::GeneratePassword => (ISE, basic_error("Generating a random password")),
-            Self::UnableToFindUserInfo => (
-                NF,
-                basic_error("Finding the details of a user on a sign-in mandatory page"),
-            ),
-            Self::IncorrectPermissions { .. } => (
-                NA,
-                basic_error(
-                    "Attempting to access/complete operations with insufficient permissions",
-                ),
-            ),
-            Self::NoHousesOrNoTutorGroups => (
-                ISE,
-                basic_error(
-                    "Trying to create a new student with either no houses and or tutor groups to add them to",
-                ),
-            ),
-            Self::Multipart { source } => (source.status(), basic_error(&source.body_text())),
-            Self::Email { .. } => (ISE, basic_error("Trying to parse an email address")),
-            Self::Zip { .. } => (ISE, basic_error("Dealing with ZIP files")),
-            Self::Csv { .. } => (ISE, basic_error("Dealing with CSV files")),
-            Self::S3Creds { .. } | Self::S3 { .. } => {
-                (ISE, basic_error("Dealing with S3 credentials"))
-            }
+            Self::CommitTransaction { .. } | Self::RollbackTransaction { .. } => ISE,
+            Self::InvalidDateTime { .. } => BI,
+            Self::InvalidChronoDateTime { .. } => ISE,
+            Self::RmpSerdeEncode { .. } => ISE,
+            Self::RmpSerdeDecode { .. } => BI,
+            Self::BadEnvVar { .. } => ISE,
+            Self::ParsePort { .. } => ISE,
+            Self::ParseTime { .. } => BI,
+            Self::ParseUuid { .. } => BI,
+            Self::MissingEvent { .. } => NF,
+            Self::MissingUser { .. } => NF,
+            Self::MissingHouseGroup { .. } => NF,
+            Self::MissingTutorGroup { .. } => NF,
+            Self::Bcrypt { .. } => ISE,
+            Self::TowerSession { .. } => ISE,
+            Self::GeneratePassword => ISE,
+            Self::UnableToFindUserInfo => NF,
+            Self::IncorrectPermissions { .. } => NA,
+            Self::NoHousesOrNoTutorGroups => ISE,
+            Self::Multipart { source } => source.status(),
+            Self::Email { .. } => ISE,
+            Self::Zip { .. } => ISE,
+            Self::Csv { .. } => ISE,
+            Self::S3Creds { .. } | Self::S3 { .. } => ISE,
+            Self::B64 { .. } => BI,
         };
 
         error!(?self, "Error!");
-        (error_code, Html(error_ty_desc)).into_response()
+        (status_code, Html(basic_error(self.to_string()))).into_response()
     }
 }

@@ -8,6 +8,7 @@ use crate::{
         BcryptSnafu, DenimResult, EmailSnafu, GetDatabaseConnectionSnafu, MakeQuerySnafu,
         MissingHouseGroupSnafu, MissingTutorGroupSnafu,
     },
+    maud_conveniences::subtitle,
 };
 use axum_login::AuthUser;
 use bcrypt::DEFAULT_COST;
@@ -20,7 +21,6 @@ use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
 use std::{str::FromStr, sync::LazyLock};
 use uuid::Uuid;
-use crate::maud_conveniences::subtitle;
 
 #[derive(Debug, Clone)]
 pub enum UserKind {
@@ -47,7 +47,7 @@ pub struct User {
     pub kind: UserKind,
 }
 
-pub struct AddPersonForm {
+pub struct AddPerson {
     pub first_name: String,
     pub pref_name: String,
     pub surname: String,
@@ -66,7 +66,7 @@ pub enum AddUserKind {
 impl DataType for User {
     type Id = Uuid;
     type FormForId = IdForm;
-    type FormForAdding = AddPersonForm;
+    type FormForAdding = AddPerson;
 
     async fn get_from_db_by_id(id: Self::Id, conn: &mut PgConnection) -> DenimResult<Option<Self>> {
         let Some(most_bits) = sqlx::query!("SELECT * FROM public.users WHERE id = $1", id)
@@ -161,7 +161,7 @@ impl DataType for User {
         to_be_added: Self::FormForAdding,
         conn: &mut PgConnection,
     ) -> DenimResult<Self::Id> {
-        let AddPersonForm {
+        let AddPerson {
             first_name,
             pref_name,
             surname,
@@ -284,8 +284,8 @@ impl User {
             .boxed();
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
-    
-    pub fn name (&self) -> String {
+
+    pub fn name(&self) -> String {
         self.render().0
     }
 }

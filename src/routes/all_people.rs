@@ -1,12 +1,12 @@
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{
-        DataType, IdForm,
+        DataType, FilterQuery, IdForm,
         student_groups::{HouseGroup, TutorGroup},
-        user::{AddPersonForm, AddUserKind, FullUserNameDisplay, User, UserKind, UsernameDisplay},
+        user::{AddPerson, AddUserKind, FullUserNameDisplay, User, UserKind, UsernameDisplay},
     },
     error::{DenimError, DenimResult, NoHousesOrNoTutorGroupsSnafu},
-    maud_conveniences::{Email, errors_list, form_element, simple_form_element},
+    maud_conveniences::{Email, errors_list, form_element, simple_form_element, subtitle, title},
     routes::sse::SseEvent,
     state::DenimState,
 };
@@ -23,8 +23,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
-use crate::data::FilterQuery;
-use crate::maud_conveniences::{subtitle, title};
 
 #[axum::debug_handler]
 pub async fn get_people(State(state): State<DenimState>, session: DenimSession) -> Response<Body> {
@@ -188,7 +186,7 @@ pub async fn internal_put_new_staff_or_dev(
         None
     };
 
-    let add_person_form = AddPersonForm {
+    let add_person_form = AddPerson {
         first_name: form.first_name,
         pref_name: form.pref_name,
         surname: form.surname,
@@ -243,7 +241,7 @@ pub async fn internal_put_new_student(
         }
     };
 
-    let add_person_form = AddPersonForm {
+    let add_person_form = AddPerson {
         first_name: form.first_name,
         pref_name: form.pref_name,
         surname: form.surname,
@@ -287,7 +285,7 @@ pub async fn delete_person(
 pub async fn internal_get_people(
     State(state): State<DenimState>,
     session: DenimSession,
-    Query(FilterQuery {filter}): Query<FilterQuery>,
+    Query(FilterQuery { filter }): Query<FilterQuery>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
 
@@ -296,7 +294,9 @@ pub async fn internal_get_people(
     let mut students = User::get_all_students(&state).await?;
 
     let retain = |user: &User| {
-        filter.as_ref().is_none_or(|filter| user.name().contains(filter))
+        filter
+            .as_ref()
+            .is_none_or(|filter| user.name().contains(filter))
     };
 
     staff.retain(retain);

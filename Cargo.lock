@@ -369,6 +369,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -573,6 +574,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-login",
+ "base64",
  "bcrypt",
  "bitflags 2.9.0",
  "chrono",

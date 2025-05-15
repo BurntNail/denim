@@ -3,6 +3,7 @@ use maud::{Escaper, Markup, PreEscaped, Render, html};
 use std::fmt::Write;
 
 #[inline]
+#[allow(clippy::needless_pass_by_value)]
 pub fn table<const N: usize>(
     overall_title: Markup,
     titles: [&str; N],
@@ -57,15 +58,15 @@ pub fn title(s: impl Render) -> Markup {
 }
 
 #[inline]
-pub fn subtitle (s: impl Render) -> Markup {
-    html!{
-        h2 class="text-xl font-semibold mb-4" {(s)} 
+pub fn subtitle(s: impl Render) -> Markup {
+    html! {
+        h2 class="text-xl font-semibold mb-4" {(s)}
     }
 }
 
 #[inline]
 pub fn subsubtitle(s: impl Render) -> Markup {
-    html!{
+    html! {
         h3 class="text-lg font-semibold mb-4" {(s)}
     }
 }
