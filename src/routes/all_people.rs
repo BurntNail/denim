@@ -23,6 +23,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
+use crate::data::FilterQuery;
 use crate::maud_conveniences::{subtitle, title};
 
 #[axum::debug_handler]
@@ -283,15 +284,10 @@ pub async fn delete_person(
     Ok(html! {})
 }
 
-#[derive(Deserialize)]
-pub struct GetPeopleQuery {
-    filter: Option<String>
-}
-
 pub async fn internal_get_people(
     State(state): State<DenimState>,
     session: DenimSession,
-    Query(GetPeopleQuery {filter}): Query<GetPeopleQuery>,
+    Query(FilterQuery {filter}): Query<FilterQuery>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
 

@@ -13,6 +13,7 @@ use axum::{
     extract::{Query, State},
 };
 use maud::{Markup, html};
+use crate::data::FilterQuery;
 use crate::maud_conveniences::title;
 
 #[axum::debug_handler]
@@ -160,30 +161,37 @@ pub async fn internal_get_event_in_detail(
     })
 }
 
-pub async fn internal_get_events(State(state): State<DenimState>) -> DenimResult<Markup> {
-    let events = Event::get_all(&state).await?;
-
-    Ok(table(
-        title("Events"),
-        ["Name", "Date", "Location",],
-        events.into_iter()
-            .map(|evt| {
-                [
-                    html!{
+pub async fn internal_get_events(State(state): State<DenimState>, Query(FilterQuery {filter}): Query<FilterQuery>) -> DenimResult<Markup> {
+    let events = Event::get_all(&state).await?
+        .into_iter()
+        .filter(|event| filter.as_ref().is_none_or(|filter| event.name.contains(filter)))
+        .map(|evt| {
+            [
+                html!{
                         a class="hover:text-blue-300 underline" hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (evt.id) "\"}" } {
                             (evt.name)
                         }
                     },
-                    escape(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
-                    html!{
+                escape(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
+                html!{
                         @if let Some(location) = evt.location {
                             p {(location)}
                         } @else {
                             p class="italic" {"-"}
                         }
                     }
-                ]
-            })
-            .collect()
+            ]
+        })
+        .collect();
+    
+    Ok(table(
+        html!{
+            (title("Events"))
+            div class="flex rounded p-4 m-4" {
+                input value=[filter] type="search" name="filter" placeholder="Begin Typing To Search Events..." hx-get="/internal/get_events" hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#all_events" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
+            }
+        },
+        ["Name", "Date", "Location",],
+        events
     ))
 }
