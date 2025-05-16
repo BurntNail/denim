@@ -1,4 +1,4 @@
-use crate::error::{BadEnvVarSnafu, DenimResult, MissingS3BucketSnafu, ParsePortSnafu};
+use crate::error::{BadEnvVarSnafu, DenimResult, GeneratePasswordSnafu, MissingS3BucketSnafu, ParsePortSnafu};
 use dotenvy::var;
 use rand::{Rng, rng};
 use s3::Bucket;
@@ -61,7 +61,6 @@ pub struct AuthConfig {
 
 impl AuthConfig {
     pub fn new() -> Self {
-        //TODO: let users actually configure this lol
         let default_word_len_range = 5..9;
         let default_numbers_range = 1_000..10_000;
 
@@ -87,16 +86,16 @@ impl AuthConfig {
         }
     }
 
-    pub fn generate(&self) -> Option<String> {
+    pub fn generate(&self) -> DenimResult<String> {
         let mut rng = rng();
 
         let word_len = rng.random_range(self.word_len_range.clone());
-        let list_to_pick_from = self.words.get(&word_len)?;
+        let list_to_pick_from = self.words.get(&word_len).context(GeneratePasswordSnafu)?;
         let chosen_word = list_to_pick_from[rng.random_range(0..list_to_pick_from.len())].clone();
 
         let chosen_number = rng.random_range(self.numbers_range.clone());
 
-        Some(format!("{chosen_word}_{chosen_number}"))
+        Ok(format!("{chosen_word}_{chosen_number}"))
     }
 }
 

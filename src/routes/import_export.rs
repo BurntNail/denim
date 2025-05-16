@@ -7,7 +7,7 @@ use crate::{
         user::{AddPerson, AddUserKind, User},
     },
     error::{
-        B64Snafu, CommitTransactionSnafu, DenimError, DenimResult, GeneratePasswordSnafu,
+        B64Snafu, CommitTransactionSnafu, DenimError, DenimResult,
         MultipartSnafu, RmpSerdeDecodeSnafu, RmpSerdeEncodeSnafu, RollbackTransactionSnafu,
         S3Snafu, ZipSnafu,
     },
@@ -26,7 +26,7 @@ use chrono::NaiveDateTime;
 use email_address::EmailAddress;
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
-use snafu::{OptionExt, ResultExt};
+use snafu::ResultExt;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write as _,
@@ -486,7 +486,7 @@ pub async fn put_add_new_students(
         let auth_config = state.config().auth_config().await;
 
         let mut passwords = (0..=students_to_add.len())
-            .map(|_| auth_config.generate().context(GeneratePasswordSnafu))
+            .map(|_| auth_config.generate())
             .collect::<Result<Vec<_>, _>>()?;
         let csv_password = passwords
             .pop()

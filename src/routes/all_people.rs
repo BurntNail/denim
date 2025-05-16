@@ -176,12 +176,12 @@ pub async fn internal_put_new_staff_or_dev(
     };
 
     let password = if form.generate_password.is_some_and(|gp| &gp == "on") {
-        state
+        Some(state
             .config()
             .auth_config()
             .await
             .generate()
-            .map(Into::into)
+            .map(Into::into)?)
     } else {
         None
     };
@@ -220,12 +220,12 @@ pub async fn internal_put_new_student(
     session.ensure_can(PermissionsTarget::CRUD_USERS)?;
 
     let password = if form.generate_password.is_some_and(|gp| &gp == "on") {
-        state
+        Some(state
             .config()
             .auth_config()
             .await
             .generate()
-            .map(Into::into)
+            .map(Into::into)?)
     } else {
         None
     };
