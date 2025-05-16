@@ -53,17 +53,20 @@ pub async fn get_import_export_page(
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::EXPORT_CSVS)?;
     let can_import = session.can(PermissionsTarget::IMPORT_CSVS);
-    
+
     if can_import && !state.config().s3_bucket_exists() {
-        return Ok(state.render(session, html!{
-            div class="flex flex-col rounded shadow-xl bg-gray-800 p-4 m-4" {
-                p class="text-lg" { 
-                    "Before you can Import or Export, you must finish "
-                    a href="/onboarding" class="text-blue-300 underline" {"onboarding"}
-                    "."
+        return Ok(state.render(
+            session,
+            html! {
+                div class="flex flex-col rounded shadow-xl bg-gray-800 p-4 m-4" {
+                    p class="text-lg" {
+                        "Before you can Import or Export, you must finish "
+                        a href="/onboarding" class="text-blue-300 underline" {"onboarding"}
+                        "."
+                    }
                 }
-            }
-        }));
+            },
+        ));
     }
 
     let job_already_running = if state.student_job_is_actually_running().await {

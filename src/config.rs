@@ -1,6 +1,4 @@
-use crate::error::{
-    BadEnvVarSnafu, DenimResult, MissingS3BucketSnafu, ParsePortSnafu,
-};
+use crate::error::{BadEnvVarSnafu, DenimResult, MissingS3BucketSnafu, ParsePortSnafu};
 use dotenvy::var;
 use rand::{Rng, rng};
 use s3::Bucket;

@@ -21,8 +21,8 @@ use crate::{
         index::get_index_route,
         login::{get_login, post_login, post_logout},
         new_admin_flow::{
-            get_start_onboarding,
-            internal_post_add_new_admin, internal_post_setup_s3,
+            get_start_onboarding, internal_post_add_new_admin, internal_post_setup_auth_config,
+            internal_post_setup_s3,
         },
         profile::{
             get_profile, internal_get_profile_edit_email, internal_get_profile_edit_first_name,
@@ -50,7 +50,6 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use crate::routes::new_admin_flow::internal_post_setup_auth_config;
 
 #[macro_use]
 extern crate tracing;
@@ -172,7 +171,7 @@ async fn main() {
         )
         .route(
             "/internal/onboarding/setup_auth_config",
-            post(internal_post_setup_auth_config)
+            post(internal_post_setup_auth_config),
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

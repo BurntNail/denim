@@ -8,7 +8,9 @@ use crate::{
         BadEnvVarSnafu, CommitTransactionSnafu, DenimResult, MakeQuerySnafu,
         RollbackTransactionSnafu, S3CredsSnafu, S3Snafu,
     },
-    maud_conveniences::{errors_list, form_submit_button, simple_form_element, supertitle, title},
+    maud_conveniences::{
+        errors_list, form_element, form_submit_button, simple_form_element, supertitle, title,
+    },
     state::DenimState,
 };
 use axum::{
@@ -25,7 +27,6 @@ use s3::{Bucket, Region, creds::Credentials};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use crate::maud_conveniences::form_element;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -65,14 +66,17 @@ pub async fn get_start_onboarding(
         .unwrap_or(false)
     {
         if session.can(PermissionsTarget::RUN_ONBOARDING) {
-            replacement_internal_markup =
-                Some(internal_get_setup_s3(State(state.clone()), session.clone(), S3Failure::empty()).await?);
+            replacement_internal_markup = Some(
+                internal_get_setup_s3(State(state.clone()), session.clone(), S3Failure::empty())
+                    .await?,
+            );
         } else {
             return Ok(Redirect::to("/").into_response());
         }
     }
-    
-    let interior = replacement_internal_markup.unwrap_or_else(|| internal_get_create_admin_account(NewAdminDetailsError::empty()));
+
+    let interior = replacement_internal_markup
+        .unwrap_or_else(|| internal_get_create_admin_account(NewAdminDetailsError::empty()));
 
     Ok(state.render(session, html! {
         div class="flex items-center justify-center" {
@@ -83,9 +87,7 @@ pub async fn get_start_onboarding(
     }).into_response())
 }
 
-fn internal_get_create_admin_account(
-    errors: NewAdminDetailsError,
-) -> Markup {
+fn internal_get_create_admin_account(errors: NewAdminDetailsError) -> Markup {
     html! {
         (supertitle("Create new Admin Account"))
 
@@ -229,11 +231,12 @@ async fn internal_get_setup_s3(
     failure: S3Failure,
 ) -> DenimResult<Markup> {
     if state.config().s3_bucket_exists() {
-        return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty()).await;
+        return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty())
+            .await;
     }
 
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-    
+
     let required = !cfg!(debug_assertions); //;)
 
     Ok(html! {
@@ -319,7 +322,8 @@ pub async fn internal_post_setup_s3(
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
     if state.config().s3_bucket_exists() {
-        return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty()).await;
+        return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty())
+            .await;
     }
 
     let mut errors = S3Failure::empty();
@@ -424,14 +428,23 @@ async fn internal_get_setup_auth_config(
 
     let auth_config = state.config().auth_config().await.clone();
 
-    let [wordlen_lower, worldlen_upper, numberrange_lower, numberrange_upper] = [
+    let [
+        wordlen_lower,
+        worldlen_upper,
+        numberrange_lower,
+        numberrange_upper,
+    ] = [
         auth_config.word_len_range.start,
         auth_config.word_len_range.end,
         auth_config.numbers_range.start,
         auth_config.numbers_range.end,
     ];
-    
-    let ranged_number_input = |id: &str, text: &str, current: usize, lower_bound: usize, upper_bound: usize| {
+
+    let ranged_number_input = |id: &str,
+                               text: &str,
+                               current: usize,
+                               lower_bound: usize,
+                               upper_bound: usize| {
         form_element(
             id,
             text,
@@ -446,7 +459,7 @@ async fn internal_get_setup_auth_config(
         p {"Now that S3's done, we can get the auth config setup - this is how the default passwords are generated"}
         br;
         p {
-            "Passwords are generated in the following format: " 
+            "Passwords are generated in the following format: "
             span class="italic" {"word_number"}
             ". The length of the word is controlled by the range and picked randomly, and the number is picked randomly from within a different range."
         }
@@ -476,9 +489,13 @@ pub struct AuthConfigForm {
     numberrange_upper: String,
 }
 
-pub async fn internal_post_setup_auth_config (State(state): State<DenimState>, session: DenimSession, Form(input): Form<AuthConfigForm>) -> DenimResult<Markup> {
+pub async fn internal_post_setup_auth_config(
+    State(state): State<DenimState>,
+    session: DenimSession,
+    Form(input): Form<AuthConfigForm>,
+) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-    
+
     let mut errors = AuthConfigFailure::empty();
     let mut current_config = state.config().auth_config().await.clone();
 
@@ -526,19 +543,18 @@ pub async fn internal_post_setup_auth_config (State(state): State<DenimState>, s
             current_config.word_len_range = lower..upper;
         }
     }
-    
+
     if !errors.is_empty() {
         return internal_get_setup_auth_config(State(state), session, errors).await;
     }
-    
+
     state.config().set_auth_config(current_config).await;
-    
-    
-    Ok(html!{
+
+    Ok(html! {
         (title("All finished with Onboarding!"))
         br;
         p {
-            "Enjoy using " 
+            "Enjoy using "
             span class="font-bold" {"Denim"}
             "!"
         }
