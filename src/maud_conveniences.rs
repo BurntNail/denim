@@ -115,7 +115,7 @@ pub fn errors_list(title: Option<&'static str>, list: impl Iterator<Item = impl 
     html! {
         div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
             strong class="font-bold" {(title)}
-            ul class="list-disc pl-5 overflow-y-clip overflow-y-scroll h-64" {
+            ul class="list-disc pl-5 overflow-y-clip overflow-y-scroll max-h-64" {
                 @for error in list {
                     li {(error)}
                 }

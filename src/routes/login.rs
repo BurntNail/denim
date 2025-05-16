@@ -1,5 +1,5 @@
 use crate::{
-    auth::{DenimSession, backend::DenimAuthCredentials},
+    auth::{DenimSession, PermissionsTarget, backend::DenimAuthCredentials},
     error::{DenimResult, MakeQuerySnafu},
     maud_conveniences::{form_submit_button, simple_form_element, supertitle},
     state::DenimState,
@@ -28,14 +28,14 @@ pub async fn get_login(
     session: DenimSession,
     Query(LoginOptions { to, login_failed }): Query<LoginOptions>,
 ) -> DenimResult<Response<Body>> {
-    if !sqlx::query!("SELECT exists(SELECT 1 FROM public.users)")
+    if !sqlx::query!("SELECT exists(SELECT 1 FROM public.admins)")
         .fetch_one(&mut *state.get_connection().await?)
         .await
         .context(MakeQuerySnafu)?
         .exists
         .unwrap_or(false)
     {
-        return Ok(Redirect::to("/onboarding/create_admin_acc").into_response());
+        return Ok(Redirect::to("/onboarding").into_response());
     }
 
     if session.user.is_some() {
@@ -77,6 +77,7 @@ pub struct LoginForm {
 }
 
 pub async fn post_login(
+    State(state): State<DenimState>,
     mut session: DenimSession,
     Form(LoginForm {
         email,
@@ -91,6 +92,14 @@ pub async fn post_login(
         Err(e) => Err(e.into()),
         Ok(Some(user)) => match session.login(&user).await {
             Ok(()) => {
+                if user
+                    .get_permissions()
+                    .contains(PermissionsTarget::RUN_ONBOARDING)
+                    && !state.config().s3_bucket_exists()
+                {
+                    return Ok(Redirect::to("/onboarding"));
+                }
+
                 let next = next.as_deref().unwrap_or("");
                 Ok(if user.current_password_is_default {
                     Redirect::to(&format!("/replace_default_password?next={next}"))

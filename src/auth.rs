@@ -53,12 +53,14 @@ bitflags! {
         const CRUD_EVENTS =              0b0000_0000_0000_1000;
         const CRUD_USERS =               0b0000_0000_0001_0000;
 
-        const SEE_PHOTOS =               0b0000_0000_0010_0000;
+        const VIEW_PHOTOS =              0b0000_0000_0010_0000;
         const IMPORT_CSVS =              0b0000_0000_0100_0000;
         const EXPORT_CSVS =              0b0000_0000_1000_0000;
 
         const CRUD_ADMINS =              0b0000_0001_0000_0000;
         const VIEW_SENSITIVE_DETAILS =   0b0000_0010_0000_0000;
+
+        const RUN_ONBOARDING =           0b0000_0100_0000_0000;
     }
 }
 

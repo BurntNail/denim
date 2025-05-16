@@ -20,7 +20,10 @@ use crate::{
         },
         index::get_index_route,
         login::{get_login, post_login, post_logout},
-        new_admin_flow::{get_create_new_admin, post_add_new_admin},
+        new_admin_flow::{
+            get_start_onboarding,
+            internal_post_add_new_admin, internal_post_setup_s3,
+        },
         profile::{
             get_profile, internal_get_profile_edit_email, internal_get_profile_edit_first_name,
             internal_get_profile_edit_password, internal_get_profile_edit_pref_name,
@@ -47,6 +50,7 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use crate::routes::new_admin_flow::internal_post_setup_auth_config;
 
 #[macro_use]
 extern crate tracing;
@@ -113,10 +117,7 @@ async fn main() {
             "/import_export/import_people_fetch",
             get(get_students_import_checker),
         )
-        .route(
-            "/onboarding/create_admin_acc",
-            get(get_create_new_admin).post(post_add_new_admin),
-        )
+        .route("/onboarding", get(get_start_onboarding))
         .route("/internal/get_people", get(internal_get_people))
         .route("/internal/get_events", get(internal_get_events))
         .route("/internal/get_person", get(internal_get_person_in_detail))
@@ -160,6 +161,18 @@ async fn main() {
         .route(
             "/internal/profile/edit_password",
             get(internal_get_profile_edit_password()).post(internal_post_profile_edit_password),
+        )
+        .route(
+            "/internal/onboarding/create_admin",
+            post(internal_post_add_new_admin),
+        )
+        .route(
+            "/internal/onboarding/setup_s3",
+            post(internal_post_setup_s3),
+        )
+        .route(
+            "/internal/onboarding/setup_auth_config",
+            post(internal_post_setup_auth_config)
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

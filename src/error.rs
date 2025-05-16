@@ -1,7 +1,7 @@
 use crate::auth::{PermissionsTarget, backend::DenimAuthBackend};
 use axum::{
     http::StatusCode,
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
 };
 use axum_login::tower_sessions::cookie::time::{OffsetDateTime, error::ComponentRange};
 use chrono::{DateTime, Utc};
@@ -102,6 +102,8 @@ pub enum DenimError {
     S3 { source: s3::error::S3Error },
     #[snafu(display("Error decoding Base64"))]
     B64 { source: base64::DecodeError },
+    #[snafu(display("The S3 bucket still needs to be setup"))]
+    MissingS3Bucket,
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -121,11 +123,16 @@ impl IntoResponse for DenimError {
         const NA: StatusCode = StatusCode::FORBIDDEN; //not allowed
         const BI: StatusCode = StatusCode::BAD_REQUEST; //bad input
 
-        let basic_error = |desc| {
+        let basic_error = |status_code: StatusCode, desc| {
             html! {
-                div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert" {
+                div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 flex flex-col" role="alert" {
                     strong class="font-bold" {"Denim Error"}
+                    br;
                     span {(desc)}
+                    br;
+                    img src={"https://http.cat/" (status_code.as_u16())} class=""
+                    br;
+                    p class="text-italic" {"Please contact your admin."}
                 }
             }
         };
@@ -162,9 +169,11 @@ impl IntoResponse for DenimError {
             Self::Csv { .. } => ISE,
             Self::S3Creds { .. } | Self::S3 { .. } => ISE,
             Self::B64 { .. } => BI,
+            Self::MissingS3Bucket => ISE,
         };
 
+        //painfully, has to return a 200 OK to get by with htmx, smh
         error!(?self, "Error!");
-        (status_code, Html(basic_error(self.to_string()))).into_response()
+        basic_error(status_code, self.to_string()).into_response()
     }
 }

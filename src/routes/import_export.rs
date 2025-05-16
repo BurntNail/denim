@@ -53,6 +53,18 @@ pub async fn get_import_export_page(
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::EXPORT_CSVS)?;
     let can_import = session.can(PermissionsTarget::IMPORT_CSVS);
+    
+    if can_import && !state.config().s3_bucket_exists() {
+        return Ok(state.render(session, html!{
+            div class="flex flex-col rounded shadow-xl bg-gray-800 p-4 m-4" {
+                p class="text-lg" { 
+                    "Before you can Import or Export, you must finish "
+                    a href="/onboarding" class="text-blue-300 underline" {"onboarding"}
+                    "."
+                }
+            }
+        }));
+    }
 
     let job_already_running = if state.student_job_is_actually_running().await {
         Some(
@@ -125,7 +137,7 @@ pub async fn get_import_export_page(
                         (job_already_running)
                     } @else {
                         div class="overflow-scroll overflow-clip" {
-                            h3 class="text-xl font-semibold mb-4" {"Import People"}
+                            h3 class="text-xl font-semibold mb-4" {"Import Students"}
                             div id="import_people_forms" {
                                 (table(
                                     subsubtitle("CSV Format"),
@@ -142,7 +154,7 @@ pub async fn get_import_export_page(
                                 p class="italic" {"NB: Missing houses, tutors and tutor groups are auto-magically added."}
                                 br;
                                 form hx-put="/import_export/import_people" hx-swap="innerHTML" hx-target="#import_people_forms" hx-encoding="multipart/form-data" {
-                                    label for="people_csv" class="block text-sm font-medium text-gray-400 mb-2" {"Upload People CSV"}
+                                    label for="people_csv" class="block text-sm font-medium text-gray-400 mb-2" {"Upload Students CSV"}
                                     input multiple type="file" name="people_csv" id="people_csv" accept=".csv" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 mb-4";
                                     (form_submit_button(Some("Import People")))
                                 }
@@ -551,7 +563,7 @@ pub async fn put_add_new_students(
                 .expect("unable to write passwords to mock zip file");
             zip.finish().context(ZipSnafu)?;
 
-            let bucket = state.config().s3_bucket();
+            let bucket = state.config().s3_bucket()?;
             bucket
                 .put_object_with_content_type(
                     "latest_passwords.zip",

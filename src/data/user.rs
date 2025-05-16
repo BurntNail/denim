@@ -232,24 +232,35 @@ impl DataType for User {
     }
 }
 
-impl User {
+impl UserKind {
     pub fn get_permissions(&self) -> PermissionsTarget {
-        match self.kind {
-            UserKind::User => {
-                PermissionsTarget::SEE_PHOTOS | PermissionsTarget::VIEW_SENSITIVE_DETAILS
+        match self {
+            Self::User => {
+                PermissionsTarget::VIEW_PHOTOS | PermissionsTarget::VIEW_SENSITIVE_DETAILS
             }
-            UserKind::Student { .. } => {
-                PermissionsTarget::SEE_PHOTOS
+            Self::Student { .. } => {
+                PermissionsTarget::VIEW_PHOTOS
+                    | PermissionsTarget::VIEW_SENSITIVE_DETAILS
                     | PermissionsTarget::SIGN_SELF_UP
+            }
+            Self::Staff => {
+                PermissionsTarget::SIGN_SELF_UP
+                    | PermissionsTarget::SIGN_OTHERS_UP
+                    | PermissionsTarget::VERIFY_ATTENDANCE
+                    | PermissionsTarget::CRUD_EVENTS
+                    | PermissionsTarget::CRUD_USERS
+                    | PermissionsTarget::VIEW_PHOTOS
+                    | PermissionsTarget::EXPORT_CSVS
                     | PermissionsTarget::VIEW_SENSITIVE_DETAILS
             }
-            UserKind::Staff => {
-                PermissionsTarget::all()
-                    - PermissionsTarget::IMPORT_CSVS
-                    - PermissionsTarget::CRUD_ADMINS
-            }
-            UserKind::Admin => PermissionsTarget::all(),
+            Self::Admin => PermissionsTarget::all(),
         }
+    }
+}
+
+impl User {
+    pub fn get_permissions(&self) -> PermissionsTarget {
+        self.kind.get_permissions()
     }
 
     pub async fn get_all_staff(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {

@@ -3,13 +3,22 @@ use crate::{
     error::DenimResult,
     state::DenimState,
 };
-use axum::{extract::State, response::IntoResponse};
+use axum::{
+    body::Body,
+    extract::State,
+    http::Response,
+    response::{IntoResponse, Redirect},
+};
 use maud::html;
 
 pub async fn get_index_route(
     State(state): State<DenimState>,
     session: DenimSession,
-) -> DenimResult<impl IntoResponse> {
+) -> DenimResult<Response<Body>> {
+    if session.can(PermissionsTarget::RUN_ONBOARDING) && !state.config().s3_bucket_exists() {
+        return Ok(Redirect::to("/onboarding").into_response());
+    }
+
     let can_view_people = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
 
     Ok(state.render(session, html! {
@@ -28,5 +37,5 @@ pub async fn get_index_route(
                 }
             }
         }
-    }))
+    }).into_response())
 }

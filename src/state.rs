@@ -99,6 +99,7 @@ impl DenimState {
         }
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn check_students_job_progress(&self) -> Option<(usize, usize)> {
         let mut lock = self.import_students_job.lock().await;
         let (_job, rx) = lock.as_mut()?;
