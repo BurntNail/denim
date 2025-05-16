@@ -105,3 +105,28 @@ impl DataType for Event {
         Ok(())
     }
 }
+
+
+impl Event {
+    pub async fn get_future_events (pool: &Pool<Postgres>) -> DenimResult<Vec<Event>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+
+        let ids = sqlx::query!("SELECT id FROM public.events WHERE date > NOW() ORDER BY date")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.id))
+            .boxed();
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
+    }
+
+    pub async fn get_past_events (pool: &Pool<Postgres>) -> DenimResult<Vec<Event>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+
+        let ids = sqlx::query!("SELECT id FROM public.events WHERE date <= NOW() ORDER BY date DESC")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.id))
+            .boxed();
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
+    }
+}

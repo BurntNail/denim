@@ -1,7 +1,7 @@
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
     data::{
-        DataType, FilterQuery, IdForm,
+        DataType, IdForm,
         event::{AddEvent, Event},
         user::User,
     },
@@ -214,40 +214,71 @@ pub async fn internal_get_event_in_detail(
     })
 }
 
+#[derive(Deserialize)]
+pub struct FuturePastFilterQuery {
+    pub future: Option<String>,
+    pub past: Option<String>,
+}
+
 pub async fn internal_get_events(
     State(state): State<DenimState>,
-    Query(FilterQuery { filter }): Query<FilterQuery>,
+    Query(FuturePastFilterQuery { future, past }): Query<FuturePastFilterQuery>,
 ) -> DenimResult<Markup> {
-    let events = Event::get_all(&state).await?
-        .into_iter()
-        .filter(|event| filter.as_ref().is_none_or(|filter| event.name.contains(filter)))
-        .map(|evt| {
-            [
-                html!{
+    let event_to_row = |evt: Event| {
+        [
+            html!{
                         a class="hover:text-blue-300 underline" hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (evt.id) "\"}" } {
                             (evt.name)
                         }
                     },
-                escape(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
-                html!{
+            escape(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
+            html!{
                         @if let Some(location) = evt.location {
                             p {(location)}
                         } @else {
                             p class="italic" {"-"}
                         }
                     }
-            ]
-        })
+        ]
+    };
+    
+    let future_events: Vec<_> = Event::get_future_events(&state)
+        .await?
+        .into_iter()
+        .filter(|event| future.as_ref().is_none_or(|filter| event.name.contains(filter)))
+        .map(event_to_row)
         .collect();
+    let past_events: Vec<_> = Event::get_past_events(&state)
+        .await?
+        .into_iter()
+        .filter(|event| past.as_ref().is_none_or(|filter| event.name.contains(filter)))
+        .map(event_to_row)
+        .collect();
+    
 
-    Ok(table(
-        html! {
-            (title("Events"))
-            div class="flex rounded p-4 m-4" {
-                input value=[filter] type="search" name="filter" placeholder="Begin Typing To Search Events..." hx-get="/internal/get_events" hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#all_events" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
-            }
-        },
-        ["Name", "Date", "Location"],
-        events,
-    ))
+    Ok(html!{
+        div class="flex flex-col" {
+            (table(
+                html! {
+                    (title("Future Events"))
+                    div class="flex rounded p-4 m-4" {
+                        input value=[future] type="search" name="future" placeholder="Begin Typing To Search Events..." hx-get="/internal/get_events" hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#all_events" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
+                    }
+                },
+                ["Name", "Date", "Location"],
+                future_events,
+            ))
+            div class="h-4 bg-transparent" {""}
+            (table(
+                html! {
+                    (title("Past Events"))
+                    div class="flex rounded p-4 m-4" {
+                        input value=[past] type="search" name="past" placeholder="Begin Typing To Search Events..." hx-get="/internal/get_events" hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#all_events" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
+                    }
+                },
+                ["Name", "Date", "Location"],
+                past_events,
+            ))
+        }
+    })
 }

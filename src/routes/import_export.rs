@@ -36,6 +36,7 @@ use std::{
 use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
+use crate::error::ParseUuidSnafu;
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -273,7 +274,7 @@ pub async fn put_add_new_events(
 #[derive(Deserialize)]
 pub struct FullEventsForm {
     b64events: String,
-    associated_staff_member: Option<Uuid>,
+    associated_staff_member: String,
 }
 
 pub async fn put_fully_import_events(
@@ -285,6 +286,12 @@ pub async fn put_fully_import_events(
     }): Form<FullEventsForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::IMPORT_CSVS)?;
+    
+    let associated_staff_member = if associated_staff_member.is_empty() {
+        None
+    } else {
+        Some(Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu { original: associated_staff_member })?)
+    };
 
     let draft_events: Vec<DraftEvent> =
         rmp_serde::from_slice(&BASE64_URL_SAFE.decode(b64events).context(B64Snafu)?)

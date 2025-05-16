@@ -21,7 +21,7 @@ pub struct IntIdForm {
 
 #[derive(Deserialize)]
 pub struct FilterQuery {
-    pub filter: Option<String>,
+    pub filter: Option<String>
 }
 
 //NB: would love to use something more generic
