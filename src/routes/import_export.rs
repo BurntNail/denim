@@ -22,7 +22,6 @@ use axum::{
     extract::{Multipart, Query, State},
 };
 use base64::{Engine, prelude::BASE64_URL_SAFE};
-use chrono::NaiveDateTime;
 use email_address::EmailAddress;
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
@@ -33,10 +32,13 @@ use std::{
     io::{Cursor, Write},
     time::Duration,
 };
+use jiff::civil::DateTime;
+use jiff::tz::TimeZone;
 use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
-use crate::error::ParseUuidSnafu;
+use crate::error::{InvalidTimezoneSnafu, ParseUuidSnafu, UnrepresentableTimeSnafu};
+use crate::maud_conveniences::timezone_picker;
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -55,7 +57,7 @@ pub async fn get_import_export_page(
     session.ensure_can(PermissionsTarget::EXPORT_CSVS)?;
     let can_import = session.can(PermissionsTarget::IMPORT_CSVS);
 
-    if can_import && !state.config().s3_bucket_exists() {
+    if can_import && !state.config().s3_bucket().exists() {
         return Ok(state.render(
             session,
             html! {
@@ -174,7 +176,7 @@ pub async fn get_import_export_page(
 #[derive(Serialize, Deserialize)]
 struct DraftEvent {
     name: String,
-    datetime: NaiveDateTime,
+    datetime: DateTime,
     location: Option<String>,
     extra_info: Option<String>,
 }
@@ -217,12 +219,12 @@ pub async fn put_add_new_events(
                     continue;
                 }
             };
-
-            let datetime = match NaiveDateTime::parse_from_str(&datetime, "%d-%m-%Y %H:%M") {
-                Ok(x) => x,
-                Err(source) => {
+            
+            let datetime = match DateTime::strptime("%d-%m-%Y %H:%M", &datetime) {
+                Ok(datetime) => datetime,
+                Err(e) => {
                     syntax_errors.push(DenimError::ParseTime {
-                        source,
+                        source: e,
                         original: datetime,
                     });
                     continue;
@@ -249,9 +251,9 @@ pub async fn put_add_new_events(
         BASE64_URL_SAFE.encode(rmp_serde::to_vec(&draft_events).context(RmpSerdeEncodeSnafu)?);
 
     let staff = User::get_all_staff(&state).await?;
+    let dlc = state.config().date_locale_config().get().cloned().ok();
 
     Ok(html! {
-
         p class="text-italic p-4" {"Successfully read " (draft_events.len()) " events."}
 
         form hx-put="/import_export/fully_import_events" hx-swap="innerHTML" hx-target="#import_events_form" {
@@ -265,6 +267,7 @@ pub async fn put_add_new_events(
                     }
                 }
             }))
+            (timezone_picker(dlc.map(|x| x.timezone)))
 
             (form_submit_button(Some("Confirm Import Events")))
         }
@@ -274,6 +277,7 @@ pub async fn put_add_new_events(
 #[derive(Deserialize)]
 pub struct FullEventsForm {
     b64events: String,
+    tz: String,
     associated_staff_member: String,
 }
 
@@ -282,16 +286,21 @@ pub async fn put_fully_import_events(
     session: DenimSession,
     Form(FullEventsForm {
         b64events,
+        tz,
         associated_staff_member,
     }): Form<FullEventsForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::IMPORT_CSVS)?;
-    
+
     let associated_staff_member = if associated_staff_member.is_empty() {
         None
     } else {
         Some(Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu { original: associated_staff_member })?)
     };
+    
+    let tz = TimeZone::get(&tz).context(InvalidTimezoneSnafu {
+        tz
+    })?;
 
     let draft_events: Vec<DraftEvent> =
         rmp_serde::from_slice(&BASE64_URL_SAFE.decode(b64events).context(B64Snafu)?)
@@ -310,7 +319,7 @@ pub async fn put_fully_import_events(
         if let Err(e) = Event::insert_into_database(
             AddEvent {
                 name: name.clone(),
-                date: datetime,
+                date: datetime.to_zoned(tz.clone()).context(UnrepresentableTimeSnafu)?,
                 location,
                 extra_info,
                 associated_staff_member,
@@ -573,7 +582,8 @@ pub async fn put_add_new_students(
                 .expect("unable to write passwords to mock zip file");
             zip.finish().context(ZipSnafu)?;
 
-            let bucket = state.config().s3_bucket()?;
+            let bucket = state.config().s3_bucket();
+            let bucket = bucket.get()?; //the bucket references the important item, so split over two lines ig
             bucket
                 .put_object_with_content_type(
                     "latest_passwords.zip",

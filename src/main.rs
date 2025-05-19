@@ -1,4 +1,5 @@
 #![warn(clippy::pedantic, clippy::all, clippy::nursery)]
+#![allow(clippy::single_match_else)]
 
 use crate::{
     auth::{backend::DenimAuthBackend, postgres_store::PostgresSessionStore},
@@ -50,6 +51,7 @@ use std::env;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use crate::routes::new_admin_flow::internal_post_setup_timezone;
 
 #[macro_use]
 extern crate tracing;
@@ -172,6 +174,10 @@ async fn main() {
         .route(
             "/internal/onboarding/setup_auth_config",
             post(internal_post_setup_auth_config),
+        )
+        .route(
+            "/internal/onboarding/setup_timezone",
+            post(internal_post_setup_timezone)
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

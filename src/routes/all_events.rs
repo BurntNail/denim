@@ -7,7 +7,7 @@ use crate::{
     },
     error::{DenimError, DenimResult, ParseTimeSnafu, ParseUuidSnafu},
     maud_conveniences::{
-        escape, form_element, form_submit_button, simple_form_element, table, title,
+        form_element, form_submit_button, simple_form_element, table, title,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -16,11 +16,14 @@ use axum::{
     Form,
     extract::{Query, State},
 };
-use chrono::NaiveDateTime;
-use maud::{Markup, html};
+use jiff::civil::DateTime;
+use jiff::tz::TimeZone;
+use maud::{Markup, html, PreEscaped};
 use serde::Deserialize;
 use snafu::ResultExt;
 use uuid::Uuid;
+use crate::error::{InvalidTimezoneSnafu, UnrepresentableTimeSnafu};
+use crate::maud_conveniences::timezone_picker;
 
 #[axum::debug_handler]
 pub async fn get_events(State(state): State<DenimState>, session: DenimSession) -> Markup {
@@ -28,17 +31,17 @@ pub async fn get_events(State(state): State<DenimState>, session: DenimSession) 
 
     state.render(session, html!{
         div class="mx-auto bg-gray-800 p-8 rounded shadow-md max-w-4xl w-full flex flex-col space-y-4" {
+            @if can_add_events {
+                button class="bg-green-600 hover:bg-green-800 font-bold py-2 px-4 rounded" hx-get="/internal/events/get_events_form" hx-target="#in_focus" {
+                    "Add new Event"
+                }
+            }
             div hx-ext="sse" sse-connect="/sse_feed" class="container flex flex-row justify-center space-x-4" {
                 div hx-get="/internal/get_events" hx-trigger="sse:crud_event,load" id="all_events" {}
                 @if can_add_events {
                     div id="in_focus" hx-get="/internal/events/get_events_form" hx-trigger="load" {}
                 } @else {
                    div id="in_focus" {} 
-                }
-            }
-            @if can_add_events {
-                button class="bg-blue-600 hover:bg-blue-800 font-bold py-2 px-4 rounded" hx-get="/internal/events/get_events_form" hx-target="#in_focus" {
-                    "Add new Event"
                 }
             }
         }
@@ -52,12 +55,14 @@ pub async fn internal_get_add_events_form(
     session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
 
     let staff = User::get_all_staff(&state).await?;
+    let dlc = state.config().date_locale_config().get().cloned().ok();
 
     Ok(html! {
         (title("Add New Event Form"))
         form hx-put="/events" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
             (simple_form_element("name", "Name", true, None, None))
             (simple_form_element("date", "Date/Time", true, Some("datetime-local"), None))
+            (timezone_picker(dlc.map(|x| x.timezone)))
             (simple_form_element("location", "Location (optional)", false, None, None))
             (form_element("extra_info", "Extra Information (optional)", html!{
                 textarea id="extra_info" name="extra_info" rows="2" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400 resize-y" {}
@@ -83,6 +88,7 @@ pub struct NewEventForm {
     location: String,
     extra_info: String,
     associated_staff_member: String,
+    tz: String,
 }
 
 pub async fn put_new_event(
@@ -94,10 +100,22 @@ pub async fn put_new_event(
         location,
         extra_info,
         associated_staff_member,
+        tz
     }): Form<NewEventForm>,
 ) -> DenimResult<Markup> {
-    let date = NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M")
-        .context(ParseTimeSnafu { original: date })?;
+    session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
+
+    let tz = TimeZone::get(&tz).context(InvalidTimezoneSnafu {
+        tz
+    })?;
+
+    let date = DateTime::strptime(
+        "%Y-%m-%dT%H:%M",
+        &date
+    )
+        .context(ParseTimeSnafu { original: date })?
+        .to_zoned(tz)
+        .context(UnrepresentableTimeSnafu)?;
 
     let location = if location.is_empty() {
         None
@@ -172,7 +190,10 @@ pub async fn internal_get_event_in_detail(
 
     let can_view_sensitives = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
     let can_delete = session.can(PermissionsTarget::CRUD_EVENTS);
-
+    
+    let dlc = state.config().date_locale_config();
+    let dlc = dlc.get()?;
+    
     Ok(html! {
         div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
             (title(html!{
@@ -187,7 +208,7 @@ pub async fn internal_get_event_in_detail(
                 }
                 p class="text-gray-200 font-semibold" {
                     "Time: "
-                    span class="font-medium" {(event.date.format("%a %d/%m/%y @ %H:%M"))}
+                    span class="font-medium" {(dlc.long_ymdet(event.datetime)?)}
                 }
                 @if can_view_sensitives {
                     @if let Some(staff) = event.associated_staff_member {
@@ -224,22 +245,27 @@ pub async fn internal_get_events(
     State(state): State<DenimState>,
     Query(FuturePastFilterQuery { future, past }): Query<FuturePastFilterQuery>,
 ) -> DenimResult<Markup> {
+    let dlc = state.config().date_locale_config();
+    let dlc = dlc.get()?;
+    
     let event_to_row = |evt: Event| {
-        [
+        Ok::<_, DenimError>([
             html!{
-                        a class="hover:text-blue-300 underline" hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (evt.id) "\"}" } {
-                            (evt.name)
-                        }
-                    },
-            escape(evt.date.format("%a %d/%m/%y @ %H:%M").to_string()),
+                a class="hover:text-blue-300 underline" hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (evt.id) "\"}" } {
+                    (evt.name)
+                }
+            },
+            {
+                PreEscaped(dlc.short_ymdet(evt.datetime)?)
+            },
             html!{
-                        @if let Some(location) = evt.location {
-                            p {(location)}
-                        } @else {
-                            p class="italic" {"-"}
-                        }
-                    }
-        ]
+                @if let Some(location) = evt.location {
+                    p {(location)}
+                } @else {
+                    p class="italic" {"-"}
+                }
+            }
+        ])
     };
     
     let future_events: Vec<_> = Event::get_future_events(&state)
@@ -247,13 +273,13 @@ pub async fn internal_get_events(
         .into_iter()
         .filter(|event| future.as_ref().is_none_or(|filter| event.name.contains(filter)))
         .map(event_to_row)
-        .collect();
+        .collect::<Result<_, _>>()?;
     let past_events: Vec<_> = Event::get_past_events(&state)
         .await?
         .into_iter()
         .filter(|event| past.as_ref().is_none_or(|filter| event.name.contains(filter)))
         .map(event_to_row)
-        .collect();
+        .collect::<Result<_, _>>()?;
     
 
     Ok(html!{

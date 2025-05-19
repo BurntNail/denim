@@ -53,6 +53,9 @@ pub async fn get_event(
         }
     });
 
+    let dlc = state.config().date_locale_config();
+    let dlc = dlc.get()?;
+    
     Ok(state.render(session, html!{
         div class="container mx-auto px-4 py-8" {
             div class="bg-gray-800 p-6 md:p-8 rounded-lg shadow-xl" {
@@ -61,7 +64,7 @@ pub async fn get_event(
                 div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" {
                     div {
                         p class="text-gray-300 text-sm" {"Date:"}
-                        p class="text-gray-100 text-lg" {(event.date.format("%A %d %B, %Y at %H:%M"))}
+                        p class="text-gray-100 text-lg" {(dlc.long_ymdet(event.datetime)?)}
                     }
                     div {
                         p class="text-gray-300 text-sm" {"Location:"}

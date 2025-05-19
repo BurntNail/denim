@@ -3,12 +3,13 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use axum_login::tower_sessions::cookie::time::{OffsetDateTime, error::ComponentRange};
-use chrono::{DateTime, Utc};
 use maud::html;
 use snafu::Snafu;
 use std::num::ParseIntError;
+use icu::datetime::DateTimeFormatterLoadError;
+use rand::{rng, Rng};
 use uuid::Uuid;
+use crate::config::ImportantItemTy;
 
 pub type DenimResult<T> = Result<T, DenimError>;
 
@@ -27,13 +28,6 @@ pub enum DenimError {
     RollbackTransaction { source: sqlx::Error },
     #[snafu(display("Error migrating DB schema"))]
     MigrateError { source: sqlx::migrate::MigrateError },
-    #[snafu(display("Error converting {} to `chrono::NaiveDateTime`", odt))]
-    InvalidDateTime { odt: OffsetDateTime },
-    #[snafu(display("Error converting {} to `time::OffsetDateTime`", utc_dt,))]
-    InvalidChronoDateTime {
-        source: ComponentRange,
-        utc_dt: DateTime<Utc>,
-    },
     #[snafu(display("Error serialising with rmp_serde"))]
     RmpSerdeEncode { source: rmp_serde::encode::Error },
     #[snafu(display("Error deserialising with rmp_serde"))]
@@ -47,7 +41,7 @@ pub enum DenimError {
     ParsePort { source: ParseIntError },
     #[snafu(display("Unable to parse date {:?}", original))]
     ParseTime {
-        source: chrono::ParseError,
+        source: jiff::Error,
         original: String,
     },
     #[snafu(display("Unable to parse uuid {:?}", original))]
@@ -102,8 +96,34 @@ pub enum DenimError {
     S3 { source: s3::error::S3Error },
     #[snafu(display("Error decoding Base64"))]
     B64 { source: base64::DecodeError },
-    #[snafu(display("The S3 bucket still needs to be setup"))]
-    MissingS3Bucket,
+    #[snafu(display("Missing the {:?} which still needs to be setup", item))]
+    MissingImportantItem {item: ImportantItemTy},
+    #[snafu(display("Invalid timezone {:?} provided from SQL: {}", tz, source))]
+    InvalidTimezone {
+        source: jiff::Error,
+        tz: String
+    },
+    #[snafu(display("Unrepresentable time: {}", source))]
+    UnrepresentableTime {
+        source: jiff::Error
+    },
+    #[snafu(display("Error creating date time formatter: {}", source))]
+    BadDateTimeFormatter {
+        source: DateTimeFormatterLoadError
+    },
+    #[snafu(display("Invalid Hour Cycle provided: {provided}"))]
+    InvalidHourCycle {
+        provided: String
+    },
+    #[snafu(display("Invalid Calendar Algorithm provided: {provided}"))]
+    InvalidCalendarAlgorithm {
+        provided: String
+    },
+    #[snafu(display("Invalid Locale {:?} provided: {}", provided, source))]
+    InvalidLocale {
+        source: icu::locale::ParseError,
+        provided: String
+    }
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -112,6 +132,12 @@ impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
             axum_login::Error::Session(source) => Self::TowerSession { source },
             axum_login::Error::Backend(backend) => backend,
         }
+    }
+}
+
+impl From<ImportantItemTy> for DenimError {
+    fn from(item: ImportantItemTy) -> Self {
+        Self::MissingImportantItem {item}
     }
 }
 
@@ -124,13 +150,20 @@ impl IntoResponse for DenimError {
         const BI: StatusCode = StatusCode::BAD_REQUEST; //bad input
 
         let basic_error = |status_code: StatusCode, desc| {
+            let url = match rng().random_range(0..5) {
+                0..3 => "https://http.cat/", //slightly biased towards cats because obvs
+                3 => "https://http.dog/",
+                4 => "https://httpstatusdogs.com/img/",
+                _ => unreachable!("out of range of random number generator")
+            };
+
             html! {
                 div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 flex flex-col" role="alert" {
                     strong class="font-bold" {"Denim Error"}
                     br;
                     span {(desc)}
                     br;
-                    img src={"https://http.cat/" (status_code.as_u16())} class=""
+                    img src={(url) (status_code.as_u16()) ".jpg"} class="";
                     br;
                     p class="text-italic" {"Please contact your admin."}
                 }
@@ -145,8 +178,6 @@ impl IntoResponse for DenimError {
                 _ => ISE,
             },
             Self::CommitTransaction { .. } | Self::RollbackTransaction { .. } => ISE,
-            Self::InvalidDateTime { .. } => BI,
-            Self::InvalidChronoDateTime { .. } => ISE,
             Self::RmpSerdeEncode { .. } => ISE,
             Self::RmpSerdeDecode { .. } => BI,
             Self::BadEnvVar { .. } => ISE,
@@ -169,7 +200,13 @@ impl IntoResponse for DenimError {
             Self::Csv { .. } => ISE,
             Self::S3Creds { .. } | Self::S3 { .. } => ISE,
             Self::B64 { .. } => BI,
-            Self::MissingS3Bucket => ISE,
+            Self::MissingImportantItem {..} => ISE,
+            Self::InvalidTimezone {..} => ISE,
+            Self::UnrepresentableTime {..} => ISE,
+            Self::BadDateTimeFormatter {..} => ISE,
+            Self::InvalidHourCycle {..} => BI,
+            Self::InvalidCalendarAlgorithm {..} => BI,
+            Self::InvalidLocale {..} => BI,
         };
 
         //painfully, has to return a 200 OK to get by with htmx, smh

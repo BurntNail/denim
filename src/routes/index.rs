@@ -15,7 +15,7 @@ pub async fn get_index_route(
     State(state): State<DenimState>,
     session: DenimSession,
 ) -> DenimResult<Response<Body>> {
-    if session.can(PermissionsTarget::RUN_ONBOARDING) && !state.config().s3_bucket_exists() {
+    if session.can(PermissionsTarget::RUN_ONBOARDING) && !state.config().s3_bucket().exists() {
         return Ok(Redirect::to("/onboarding").into_response());
     }
 

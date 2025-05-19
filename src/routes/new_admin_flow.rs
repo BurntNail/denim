@@ -27,6 +27,8 @@ use s3::{Bucket, Region, creds::Credentials};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
+use crate::config::DateLocaleConfig;
+use crate::maud_conveniences::timezone_picker;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -230,11 +232,10 @@ async fn internal_get_setup_s3(
     session: DenimSession,
     failure: S3Failure,
 ) -> DenimResult<Markup> {
-    if state.config().s3_bucket_exists() {
+    if state.config().s3_bucket().exists() {
         return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty())
             .await;
     }
-
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
 
     let required = !cfg!(debug_assertions); //;)
@@ -321,7 +322,7 @@ pub async fn internal_post_setup_s3(
     }): Form<S3Details>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-    if state.config().s3_bucket_exists() {
+    if state.config().s3_bucket().exists() {
         return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty())
             .await;
     }
@@ -383,7 +384,7 @@ pub async fn internal_post_setup_s3(
         return internal_get_setup_s3(State(state), session, bucket_is_bad).await;
     }
 
-    if state.config().set_s3_bucket(*bucket).is_err() {
+    if state.config().s3_bucket().set(*bucket).is_err() {
         error!("Tried to add new S3 bucket when one already existed...");
     } else {
         info!("Successfully added bucket");
@@ -550,7 +551,74 @@ pub async fn internal_post_setup_auth_config(
 
     state.config().set_auth_config(current_config).await;
 
+    internal_get_setup_timezone(State(state), session)
+}
+
+fn internal_get_setup_timezone (State(state): State<DenimState>, session: DenimSession) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
+    if state.config().date_locale_config().exists() {
+        return Ok(get_all_finished());
+    }
+
+
     Ok(html! {
+        (title("Setup Timezone"))
+        p {"Next is the timezone - this will be used as the default for adding events."}
+
+        br;
+        form hx-post="/internal/onboarding/setup_timezone" hx-target="#current_section" {
+            (timezone_picker(None))
+            (form_element("hour_cycle", "Hour Cycle", html!{
+                select required id="hour_cycle" name="hour_cycle" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
+                    option selected value="h23" {"24-hour"}
+                    option value="h12" {"12-hour (standard)"}
+                    option value="h11" {"12-hour (Japanese variant)"}
+                }
+            }))
+            (form_element("calendar_algorithm", "Calendar", html!{
+                select required id="calendar_algorithm" name="calendar_algorithm" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
+                    option selected value="gregorian" {"Gregorian (ISO 8601 Standard Western)"}
+                    option value="buddhist" {"Buddhist"}
+                    option value="chinese" {"Chinese"}
+                    option value="japanese" {"Japanese"}
+                    option value="hebrew" {"Hebrew"}
+                    option value="dangi" {"Dangi"}
+                }
+            }))
+            (simple_form_element("locale", "Locale", true, None, Some("en-GB")))
+
+            (form_submit_button(Some("Submit Timezone")))
+        }
+    })
+}
+
+#[derive(Deserialize)]
+pub struct SetupTzForm {
+    tz: String,
+    hour_cycle: String,
+    calendar_algorithm: String,
+    locale: String,
+}
+
+pub async fn internal_post_setup_timezone (State(state): State<DenimState>, session: DenimSession, Form(SetupTzForm {tz, hour_cycle, calendar_algorithm, locale}): Form<SetupTzForm>) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
+    if state.config().date_locale_config().exists() {
+        return Ok(get_all_finished());
+    }
+    
+    let _ = state.config().date_locale_config().set(DateLocaleConfig::new(
+        tz,
+        locale,
+        hour_cycle,
+        calendar_algorithm
+    )?);
+
+    Ok(get_all_finished())
+}
+
+
+fn get_all_finished () -> Markup {
+    html! {
         (title("All finished with Onboarding!"))
         br;
         p {
@@ -564,5 +632,5 @@ pub async fn internal_post_setup_auth_config(
             a class="text-blue-300 underline" href="/import_export" {"import events and students"}
             "."
         }
-    })
+    }
 }

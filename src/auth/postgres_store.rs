@@ -1,6 +1,6 @@
 use crate::{
     error::{
-        DenimError, InvalidChronoDateTimeSnafu, InvalidDateTimeSnafu, MakeQuerySnafu,
+        DenimError, MakeQuerySnafu,
         RmpSerdeEncodeSnafu,
     },
     state::DenimState,
@@ -8,12 +8,10 @@ use crate::{
 use async_trait::async_trait;
 use axum_login::tower_sessions::{
     ExpiredDeletion, SessionStore,
-    cookie::time::OffsetDateTime,
     session::{Id, Record},
     session_store::Error as SSError,
 };
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
-use snafu::{OptionExt, ResultExt};
+use snafu::{ResultExt};
 use sqlx::PgConnection;
 
 #[derive(Debug, Clone)]
@@ -41,33 +39,9 @@ impl PostgresSessionStore {
     }
 
     async fn save_session(record: &Record, conn: &mut PgConnection) -> Result<(), DenimError> {
-        let datetime: DateTime<FixedOffset> = DateTime::from_naive_utc_and_offset(
-            NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(
-                    record.expiry_date.year(),
-                    u32::from(record.expiry_date.month() as u8),
-                    u32::from(record.expiry_date.day()),
-                )
-                .context(InvalidDateTimeSnafu {
-                    odt: record.expiry_date,
-                })?,
-                NaiveTime::from_hms_nano_opt(
-                    u32::from(record.expiry_date.hour()),
-                    u32::from(record.expiry_date.minute()),
-                    u32::from(record.expiry_date.second()),
-                    record.expiry_date.nanosecond(),
-                )
-                .context(InvalidDateTimeSnafu {
-                    odt: record.expiry_date,
-                })?,
-            ),
-            FixedOffset::east_opt(record.expiry_date.offset().whole_seconds())
-                .expect("time invariants broken"),
-        );
-
         let serialised_data = rmp_serde::to_vec(&record.data).context(RmpSerdeEncodeSnafu)?;
 
-        sqlx::query!("INSERT INTO sessions VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = excluded.data, expiry_date = excluded.expiry_date", record.id.to_string(), serialised_data, datetime)
+        sqlx::query!("INSERT INTO sessions VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = excluded.data, expiry_date = excluded.expiry_date", record.id.to_string(), serialised_data, record.expiry_date)
             .execute(conn)
             .await.context(MakeQuerySnafu)?;
 
@@ -136,13 +110,8 @@ impl SessionStore for PostgresSessionStore {
         let id = *session_id;
         let data =
             rmp_serde::from_slice(&sql_record.data).map_err(|e| SSError::Decode(e.to_string()))?;
-
-        let expiry_date = OffsetDateTime::from_unix_timestamp(sql_record.expiry_date.timestamp())
-            .context(InvalidChronoDateTimeSnafu {
-                utc_dt: sql_record.expiry_date,
-            })
-            .map_err(|e| SSError::Decode(e.to_string()))?;
-
+        let expiry_date = sql_record.expiry_date;
+        
         Ok(Some(Record {
             id,
             data,

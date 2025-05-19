@@ -121,17 +121,20 @@ pub async fn internal_get_profile_student_display(
     };
 
     let mut event_details = Vec::with_capacity(events_participated.len());
+    
+    let dlc = state.config().date_locale_config();
+    let dlc = dlc.get()?;
+    
     for event in events_participated {
         if let Some(event) =
             Event::get_from_db_by_id(event, &mut *state.get_connection().await?).await?
-        {
+        {            
             event_details.push([
-                //TODO: link to event
                 html! {
-                    (event.name)
+                    a href={"/event/" (event.id)} class="underline text-blue-300" {(event.name)}
                 },
                 html! {
-                    (event.date.format("%d/%m/%y"))
+                    (dlc.short_ymd(event.datetime)?)
                 },
             ]);
         }

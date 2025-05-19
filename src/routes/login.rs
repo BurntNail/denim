@@ -95,7 +95,7 @@ pub async fn post_login(
                 if user
                     .get_permissions()
                     .contains(PermissionsTarget::RUN_ONBOARDING)
-                    && !state.config().s3_bucket_exists()
+                    && !state.config().s3_bucket().exists()
                 {
                     return Ok(Redirect::to("/onboarding"));
                 }
