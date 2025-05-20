@@ -23,7 +23,7 @@ use crate::{
         login::{get_login, post_login, post_logout},
         new_admin_flow::{
             get_start_onboarding, internal_post_add_new_admin, internal_post_setup_auth_config,
-            internal_post_setup_s3,
+            internal_post_setup_s3, internal_post_setup_timezone,
         },
         profile::{
             get_profile, internal_get_profile_edit_email, internal_get_profile_edit_first_name,
@@ -38,18 +38,19 @@ use crate::{
     },
     state::DenimState,
 };
-use axum::{Router, routing::{get, post, put}};
+use axum::{
+    Router,
+    routing::{get, post, put},
+};
 use axum_login::{
     AuthManagerLayerBuilder,
     tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration},
 };
 use sqlx::postgres::PgPoolOptions;
 use std::env;
-use tokio::net::TcpListener;
-use tokio::signal;
+use tokio::{net::TcpListener, signal};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use crate::routes::new_admin_flow::internal_post_setup_timezone;
 
 #[macro_use]
 extern crate tracing;
@@ -204,7 +205,7 @@ async fn main() {
         )
         .route(
             "/internal/onboarding/setup_timezone",
-            post(internal_post_setup_timezone)
+            post(internal_post_setup_timezone),
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

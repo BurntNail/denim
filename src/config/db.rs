@@ -1,7 +1,7 @@
+use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu};
 use dotenvy::var;
 use secrecy::{ExposeSecret, SecretString};
 use snafu::ResultExt;
-use crate::error::{BadEnvVarSnafu, DenimResult, ParsePortSnafu};
 
 #[derive(Debug)]
 pub struct DbConfig {

@@ -1,26 +1,25 @@
-use crate::error::DenimResult;
-use s3::Bucket;
-use std::{
-    sync::Arc,
+use crate::{
+    config::{
+        auth::AuthConfig, date_locale::DateLocaleConfig, db::DbConfig,
+        important_item::ImportantItemContainer,
+    },
+    error::DenimResult,
 };
-use crate::config::auth::AuthConfig;
-use crate::config::date_locale::DateLocaleConfig;
-use crate::config::db::DbConfig;
-use crate::config::important_item::ImportantItemContainer;
+use s3::Bucket;
+use std::sync::Arc;
 
-pub mod important_item;
-pub mod date_locale;
 pub mod auth;
+pub mod date_locale;
 pub mod db;
+pub mod important_item;
 
 #[derive(Clone, Debug)]
 pub struct RuntimeConfiguration {
     db_config: Arc<DbConfig>,
     auth_config: ImportantItemContainer<AuthConfig>,
     s3_bucket: ImportantItemContainer<Bucket>,
-    date_locale_config: ImportantItemContainer<DateLocaleConfig>
+    date_locale_config: ImportantItemContainer<DateLocaleConfig>,
 }
-
 
 impl RuntimeConfiguration {
     pub fn new() -> DenimResult<Self> {
@@ -36,24 +35,24 @@ impl RuntimeConfiguration {
         self.db_config.clone()
     }
 
-    pub fn auth_config (&self) -> ImportantItemContainer<AuthConfig> {
+    pub fn auth_config(&self) -> ImportantItemContainer<AuthConfig> {
         self.auth_config.clone()
     }
 
-    pub fn s3_bucket (&self) -> ImportantItemContainer<Bucket> {
+    pub fn s3_bucket(&self) -> ImportantItemContainer<Bucket> {
         self.s3_bucket.clone()
     }
-    
+
     pub fn date_locale_config(&self) -> ImportantItemContainer<DateLocaleConfig> {
         self.date_locale_config.clone()
     }
-    
-    pub async fn save (&self) -> DenimResult<()> {
+
+    pub async fn save(&self) -> DenimResult<()> {
         if let Ok(bucket) = self.s3_bucket.get() {
             self.auth_config.save(&bucket).await?;
             self.date_locale_config.save(&bucket).await?;
         }
-        
+
         Ok(())
     }
 }

@@ -1,5 +1,6 @@
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
+    config::date_locale::DateFormat,
     data::{DataType, event::Event, user::User},
     error::{DenimResult, MakeQuerySnafu, MissingEventSnafu},
     maud_conveniences::supertitle,
@@ -9,7 +10,6 @@ use axum::extract::{Path, State};
 use maud::{Markup, html};
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
-use crate::config::date_locale::DateFormat;
 
 #[allow(clippy::too_many_lines)]
 pub async fn get_event(
@@ -56,7 +56,7 @@ pub async fn get_event(
     });
 
     let dlc = state.config().date_locale_config().get()?;
-    
+
     Ok(state.render(session, html!{
         div class="container mx-auto px-4 py-8" {
             div class="bg-gray-800 p-6 md:p-8 rounded-lg shadow-xl" {

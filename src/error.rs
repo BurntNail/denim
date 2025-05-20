@@ -1,15 +1,17 @@
-use crate::auth::{PermissionsTarget, backend::DenimAuthBackend};
+use crate::{
+    auth::{PermissionsTarget, backend::DenimAuthBackend},
+    config::important_item::ImportantItemTy,
+};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use icu::datetime::DateTimeFormatterLoadError;
 use maud::html;
+use rand::{Rng, rng};
 use snafu::Snafu;
 use std::num::ParseIntError;
-use icu::datetime::DateTimeFormatterLoadError;
-use rand::{rng, Rng};
 use uuid::Uuid;
-use crate::config::important_item::ImportantItemTy;
 
 pub type DenimResult<T> = Result<T, DenimError>;
 
@@ -97,33 +99,22 @@ pub enum DenimError {
     #[snafu(display("Error decoding Base64"))]
     B64 { source: base64::DecodeError },
     #[snafu(display("Missing the {:?} which still needs to be setup", item))]
-    MissingImportantItem {item: ImportantItemTy},
+    MissingImportantItem { item: ImportantItemTy },
     #[snafu(display("Invalid timezone {:?} provided from SQL: {}", tz, source))]
-    InvalidTimezone {
-        source: jiff::Error,
-        tz: String
-    },
+    InvalidTimezone { source: jiff::Error, tz: String },
     #[snafu(display("Unrepresentable time: {}", source))]
-    UnrepresentableTime {
-        source: jiff::Error
-    },
+    UnrepresentableTime { source: jiff::Error },
     #[snafu(display("Error creating date time formatter: {}", source))]
-    BadDateTimeFormatter {
-        source: DateTimeFormatterLoadError
-    },
+    BadDateTimeFormatter { source: DateTimeFormatterLoadError },
     #[snafu(display("Invalid Hour Cycle provided: {provided}"))]
-    InvalidHourCycle {
-        provided: String
-    },
+    InvalidHourCycle { provided: String },
     #[snafu(display("Invalid Calendar Algorithm provided: {provided}"))]
-    InvalidCalendarAlgorithm {
-        provided: String
-    },
+    InvalidCalendarAlgorithm { provided: String },
     #[snafu(display("Invalid Locale {:?} provided: {}", provided, source))]
     InvalidLocale {
         source: icu::locale::ParseError,
-        provided: String
-    }
+        provided: String,
+    },
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -137,7 +128,7 @@ impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
 
 impl From<ImportantItemTy> for DenimError {
     fn from(item: ImportantItemTy) -> Self {
-        Self::MissingImportantItem {item}
+        Self::MissingImportantItem { item }
     }
 }
 
@@ -154,7 +145,7 @@ impl IntoResponse for DenimError {
                 0..3 => "https://http.cat/", //slightly biased towards cats because obvs
                 3 => "https://http.dog/",
                 4 => "https://httpstatusdogs.com/img/",
-                _ => unreachable!("out of range of random number generator")
+                _ => unreachable!("out of range of random number generator"),
             };
 
             html! {
@@ -200,13 +191,13 @@ impl IntoResponse for DenimError {
             Self::Csv { .. } => ISE,
             Self::S3Creds { .. } | Self::S3 { .. } => ISE,
             Self::B64 { .. } => BI,
-            Self::MissingImportantItem {..} => ISE,
-            Self::InvalidTimezone {..} => ISE,
-            Self::UnrepresentableTime {..} => ISE,
-            Self::BadDateTimeFormatter {..} => ISE,
-            Self::InvalidHourCycle {..} => BI,
-            Self::InvalidCalendarAlgorithm {..} => BI,
-            Self::InvalidLocale {..} => BI,
+            Self::MissingImportantItem { .. } => ISE,
+            Self::InvalidTimezone { .. } => ISE,
+            Self::UnrepresentableTime { .. } => ISE,
+            Self::BadDateTimeFormatter { .. } => ISE,
+            Self::InvalidHourCycle { .. } => BI,
+            Self::InvalidCalendarAlgorithm { .. } => BI,
+            Self::InvalidLocale { .. } => BI,
         };
 
         //painfully, has to return a 200 OK to get by with htmx, smh

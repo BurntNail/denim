@@ -1,13 +1,19 @@
-use std::collections::HashMap;
-use std::ops::Range;
-use std::sync::{Arc, LazyLock};
-use rand::{rng, Rng};
-use s3::Bucket;
-use s3::error::S3Error;
+use crate::{
+    config::important_item::{ImportantItem, ImportantItemTy},
+    error::{
+        DenimError, DenimResult, GeneratePasswordSnafu, RmpSerdeDecodeSnafu, RmpSerdeEncodeSnafu,
+        S3Snafu,
+    },
+};
+use rand::{Rng, rng};
+use s3::{Bucket, error::S3Error};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt};
-use crate::config::important_item::{ImportantItem, ImportantItemTy};
-use crate::error::{DenimError, DenimResult, GeneratePasswordSnafu, RmpSerdeDecodeSnafu, RmpSerdeEncodeSnafu, S3Snafu};
+use std::{
+    collections::HashMap,
+    ops::Range,
+    sync::{Arc, LazyLock},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -33,12 +39,14 @@ impl AuthConfig {
         });
         &WORDS
     }
-    
+
     pub fn generate(&self) -> DenimResult<String> {
         let mut rng = rng();
 
         let word_len = rng.random_range(self.word_len_range.clone());
-        let list_to_pick_from = Self::words().get(&word_len).context(GeneratePasswordSnafu)?;
+        let list_to_pick_from = Self::words()
+            .get(&word_len)
+            .context(GeneratePasswordSnafu)?;
         let chosen_word = list_to_pick_from[rng.random_range(0..list_to_pick_from.len())].clone();
 
         let chosen_number = rng.random_range(self.numbers_range.clone());
@@ -66,20 +74,25 @@ impl ImportantItem for AuthConfig {
     async fn get_from_bucket(bucket: &Bucket) -> DenimResult<Option<Self>> {
         let rsp = match bucket.get_object("auth_config.bin").await {
             Err(S3Error::HttpFailWithBody(404, _)) => return Ok(None),
-            Err(e) => return Err(DenimError::S3 {source: e}),
+            Err(e) => return Err(DenimError::S3 { source: e }),
             Ok(rsp) => rsp,
         };
-        
-        rmp_serde::from_slice(rsp.bytes()).context(RmpSerdeDecodeSnafu).map(Some)
+
+        rmp_serde::from_slice(rsp.bytes())
+            .context(RmpSerdeDecodeSnafu)
+            .map(Some)
     }
 
     async fn save_to_bucket(&self, bucket: &Bucket) -> DenimResult<()> {
         let serialised = rmp_serde::to_vec(self).context(RmpSerdeEncodeSnafu)?;
-        bucket.put_object_with_content_type(
-            "auth_config.bin",
-            &serialised,
-            "application/octet-stream"
-        ).await.context(S3Snafu)?;
+        bucket
+            .put_object_with_content_type(
+                "auth_config.bin",
+                &serialised,
+                "application/octet-stream",
+            )
+            .await
+            .context(S3Snafu)?;
         Ok(())
     }
 }

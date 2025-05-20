@@ -7,12 +7,13 @@ use crate::{
         user::{AddPerson, AddUserKind, User},
     },
     error::{
-        B64Snafu, CommitTransactionSnafu, DenimError, DenimResult,
-        MultipartSnafu, RmpSerdeDecodeSnafu, RmpSerdeEncodeSnafu, RollbackTransactionSnafu,
-        S3Snafu, ZipSnafu,
+        B64Snafu, CommitTransactionSnafu, DenimError, DenimResult, InvalidTimezoneSnafu,
+        MultipartSnafu, ParseUuidSnafu, RmpSerdeDecodeSnafu, RmpSerdeEncodeSnafu,
+        RollbackTransactionSnafu, S3Snafu, UnrepresentableTimeSnafu, ZipSnafu,
     },
     maud_conveniences::{
-        Email, errors_list, form_element, form_submit_button, subsubtitle, table, title,
+        Email, errors_list, form_element, form_submit_button, subsubtitle, table, timezone_picker,
+        title,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -23,6 +24,7 @@ use axum::{
 };
 use base64::{Engine, prelude::BASE64_URL_SAFE};
 use email_address::EmailAddress;
+use jiff::{civil::DateTime, tz::TimeZone};
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -32,13 +34,9 @@ use std::{
     io::{Cursor, Write},
     time::Duration,
 };
-use jiff::civil::DateTime;
-use jiff::tz::TimeZone;
 use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
-use crate::error::{InvalidTimezoneSnafu, ParseUuidSnafu, UnrepresentableTimeSnafu};
-use crate::maud_conveniences::timezone_picker;
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -219,7 +217,7 @@ pub async fn put_add_new_events(
                     continue;
                 }
             };
-            
+
             let datetime = match DateTime::strptime("%d-%m-%Y %H:%M", &datetime) {
                 Ok(datetime) => datetime,
                 Err(e) => {
@@ -295,12 +293,14 @@ pub async fn put_fully_import_events(
     let associated_staff_member = if associated_staff_member.is_empty() {
         None
     } else {
-        Some(Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu { original: associated_staff_member })?)
+        Some(
+            Uuid::try_parse(&associated_staff_member).context(ParseUuidSnafu {
+                original: associated_staff_member,
+            })?,
+        )
     };
-    
-    let tz = TimeZone::get(&tz).context(InvalidTimezoneSnafu {
-        tz
-    })?;
+
+    let tz = TimeZone::get(&tz).context(InvalidTimezoneSnafu { tz })?;
 
     let draft_events: Vec<DraftEvent> =
         rmp_serde::from_slice(&BASE64_URL_SAFE.decode(b64events).context(B64Snafu)?)
@@ -319,7 +319,9 @@ pub async fn put_fully_import_events(
         if let Err(e) = Event::insert_into_database(
             AddEvent {
                 name: name.clone(),
-                date: datetime.to_zoned(tz.clone()).context(UnrepresentableTimeSnafu)?,
+                date: datetime
+                    .to_zoned(tz.clone())
+                    .context(UnrepresentableTimeSnafu)?,
                 location,
                 extra_info,
                 associated_staff_member,

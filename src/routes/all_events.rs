@@ -5,9 +5,12 @@ use crate::{
         event::{AddEvent, Event},
         user::User,
     },
-    error::{DenimError, DenimResult, ParseTimeSnafu, ParseUuidSnafu},
+    error::{
+        DenimError, DenimResult, InvalidTimezoneSnafu, ParseTimeSnafu, ParseUuidSnafu,
+        UnrepresentableTimeSnafu,
+    },
     maud_conveniences::{
-        form_element, form_submit_button, simple_form_element, table, title,
+        form_element, form_submit_button, simple_form_element, table, timezone_picker, title,
     },
     routes::sse::SseEvent,
     state::DenimState,
@@ -16,14 +19,11 @@ use axum::{
     Form,
     extract::{Query, State},
 };
-use jiff::civil::DateTime;
-use jiff::tz::TimeZone;
-use maud::{Markup, html, PreEscaped};
+use jiff::{civil::DateTime, tz::TimeZone};
+use maud::{Markup, PreEscaped, html};
 use serde::Deserialize;
 use snafu::ResultExt;
 use uuid::Uuid;
-use crate::error::{InvalidTimezoneSnafu, UnrepresentableTimeSnafu};
-use crate::maud_conveniences::timezone_picker;
 
 #[axum::debug_handler]
 pub async fn get_events(State(state): State<DenimState>, session: DenimSession) -> Markup {
@@ -100,19 +100,14 @@ pub async fn put_new_event(
         location,
         extra_info,
         associated_staff_member,
-        tz
+        tz,
     }): Form<NewEventForm>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
 
-    let tz = TimeZone::get(&tz).context(InvalidTimezoneSnafu {
-        tz
-    })?;
+    let tz = TimeZone::get(&tz).context(InvalidTimezoneSnafu { tz })?;
 
-    let date = DateTime::strptime(
-        "%Y-%m-%dT%H:%M",
-        &date
-    )
+    let date = DateTime::strptime("%Y-%m-%dT%H:%M", &date)
         .context(ParseTimeSnafu { original: date })?
         .to_zoned(tz)
         .context(UnrepresentableTimeSnafu)?;
@@ -190,9 +185,9 @@ pub async fn internal_get_event_in_detail(
 
     let can_view_sensitives = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
     let can_delete = session.can(PermissionsTarget::CRUD_EVENTS);
-    
+
     let dlc = state.config().date_locale_config().get()?;
-    
+
     Ok(html! {
         div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
             (title(html!{
@@ -245,42 +240,46 @@ pub async fn internal_get_events(
     Query(FuturePastFilterQuery { future, past }): Query<FuturePastFilterQuery>,
 ) -> DenimResult<Markup> {
     let dlc = state.config().date_locale_config().get()?;
-    
+
     let event_to_row = |evt: Event| {
         Ok::<_, DenimError>([
-            html!{
+            html! {
                 a class="hover:text-blue-300 underline" hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (evt.id) "\"}" } {
                     (evt.name)
                 }
             },
-            {
-                PreEscaped(dlc.short_ymdet(&evt.datetime)?)
-            },
-            html!{
+            { PreEscaped(dlc.short_ymdet(&evt.datetime)?) },
+            html! {
                 @if let Some(location) = evt.location {
                     p {(location)}
                 } @else {
                     p class="italic" {"-"}
                 }
-            }
+            },
         ])
     };
-    
+
     let future_events: Vec<_> = Event::get_future_events(&state)
         .await?
         .into_iter()
-        .filter(|event| future.as_ref().is_none_or(|filter| event.name.contains(filter)))
+        .filter(|event| {
+            future
+                .as_ref()
+                .is_none_or(|filter| event.name.contains(filter))
+        })
         .map(event_to_row)
         .collect::<Result<_, _>>()?;
     let past_events: Vec<_> = Event::get_past_events(&state)
         .await?
         .into_iter()
-        .filter(|event| past.as_ref().is_none_or(|filter| event.name.contains(filter)))
+        .filter(|event| {
+            past.as_ref()
+                .is_none_or(|filter| event.name.contains(filter))
+        })
         .map(event_to_row)
         .collect::<Result<_, _>>()?;
-    
 
-    Ok(html!{
+    Ok(html! {
         div class="flex flex-col" {
             (table(
                 html! {

@@ -1,8 +1,5 @@
 use crate::{
-    error::{
-        DenimError, MakeQuerySnafu,
-        RmpSerdeEncodeSnafu,
-    },
+    error::{DenimError, MakeQuerySnafu, RmpSerdeEncodeSnafu},
     state::DenimState,
 };
 use async_trait::async_trait;
@@ -11,7 +8,7 @@ use axum_login::tower_sessions::{
     session::{Id, Record},
     session_store::Error as SSError,
 };
-use snafu::{ResultExt};
+use snafu::ResultExt;
 use sqlx::PgConnection;
 
 #[derive(Debug, Clone)]
@@ -111,7 +108,7 @@ impl SessionStore for PostgresSessionStore {
         let data =
             rmp_serde::from_slice(&sql_record.data).map_err(|e| SSError::Decode(e.to_string()))?;
         let expiry_date = sql_record.expiry_date;
-        
+
         Ok(Some(Record {
             id,
             data,

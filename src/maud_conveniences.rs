@@ -1,7 +1,7 @@
 use email_address::EmailAddress;
+use jiff::tz::{TimeZone, TimeZoneName, db};
 use maud::{Escaper, Markup, PreEscaped, Render, html};
 use std::fmt::Write;
-use jiff::tz::{db, TimeZone, TimeZoneName};
 
 #[inline]
 #[allow(clippy::needless_pass_by_value)]
@@ -126,14 +126,17 @@ pub fn errors_list(title: Option<&'static str>, list: impl Iterator<Item = impl 
     }
 }
 
-pub fn timezone_picker (current: Option<TimeZone>) -> Markup {
-    let current = current.map_or_else(|| match TimeZone::try_system() {
-        Ok(tz) => Some(tz),
-        Err(e) => {
-            warn!(?e, "Failed to get system timezone");
-            None
-        }
-    }, Some);
+pub fn timezone_picker(current: Option<TimeZone>) -> Markup {
+    let current = current.map_or_else(
+        || match TimeZone::try_system() {
+            Ok(tz) => Some(tz),
+            Err(e) => {
+                warn!(?e, "Failed to get system timezone");
+                None
+            }
+        },
+        Some,
+    );
 
     let current_is_system = |test: &TimeZoneName| {
         let Ok(actual_tz) = TimeZone::get(test.as_str()) else {
@@ -142,14 +145,18 @@ pub fn timezone_picker (current: Option<TimeZone>) -> Markup {
         current.as_ref().is_none_or(|sys_tz| &actual_tz == sys_tz)
     };
 
-    form_element("tz", "Timezone", html!{
-        select required id="tz" name="tz" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
-            @for tz in db().available() {
-                @let selected = current_is_system(&tz);
-                option value={(tz)} selected[selected] {(tz)}
+    form_element(
+        "tz",
+        "Timezone",
+        html! {
+            select required id="tz" name="tz" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
+                @for tz in db().available() {
+                    @let selected = current_is_system(&tz);
+                    option value={(tz)} selected[selected] {(tz)}
+                }
             }
-        }
-    })
+        },
+    )
 }
 
 pub struct Email<'a>(pub &'a EmailAddress);

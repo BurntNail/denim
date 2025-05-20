@@ -1,15 +1,15 @@
 use crate::{
     data::{DataType, IdForm, user::User},
-    error::{DenimError, DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
+    error::{
+        DenimError, DenimResult, GetDatabaseConnectionSnafu, InvalidTimezoneSnafu, MakeQuerySnafu,
+    },
 };
 use futures::StreamExt;
-use jiff::{Timestamp, Zoned};
-use jiff::tz::TimeZone;
+use jiff::{Timestamp, Zoned, tz::TimeZone};
 use snafu::ResultExt;
 use sqlx::{PgConnection, Pool, Postgres};
 use time::{Date, Month, PrimitiveDateTime, Time};
 use uuid::Uuid;
-use crate::error::InvalidTimezoneSnafu;
 
 #[derive(Debug)]
 pub struct Event {
@@ -46,16 +46,14 @@ impl DataType for Event {
             Some(id) => User::get_from_db_by_id(id, &mut *conn).await?,
             None => None,
         };
-        
-        let timezone = TimeZone::get(&most_bits.tz).context(InvalidTimezoneSnafu {tz: most_bits.tz})?;
+
+        let timezone =
+            TimeZone::get(&most_bits.tz).context(InvalidTimezoneSnafu { tz: most_bits.tz })?;
 
         #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let datetime = {
             let date = most_bits.date.assume_utc();
-            Timestamp::new(
-                date.unix_timestamp(),
-                date.nanosecond() as _
-            )
+            Timestamp::new(date.unix_timestamp(), date.nanosecond() as _)
                 .expect("`date` guarantees timestamps are in valid intervals")
                 .to_zoned(timezone)
         };
@@ -118,15 +116,18 @@ impl DataType for Event {
             PrimitiveDateTime::new(
                 Date::from_calendar_date(
                     date.year() as _,
-                    Month::try_from(date.month() as u8).expect("`jiff` assures me the date is in range"),
-                    date.day() as _
-                ).expect("`jiff` assures me the values are sensible"),
+                    Month::try_from(date.month() as u8)
+                        .expect("`jiff` assures me the date is in range"),
+                    date.day() as _,
+                )
+                .expect("`jiff` assures me the values are sensible"),
                 Time::from_hms_nano(
                     time.hour() as _,
                     time.minute() as _,
                     time.second() as _,
                     time.subsec_nanosecond() as _,
-                ).expect("`jiff` assures me the values are sensible")
+                )
+                .expect("`jiff` assures me the values are sensible"),
             )
         };
 
@@ -134,7 +135,7 @@ impl DataType for Event {
             warn!(%name, %date, "Unable to find IANA timezone, using UTC");
             "UTC"
         });
-        
+
         //gets weird when i try to use query_as, idk
         Ok(sqlx::query!("INSERT INTO public.events (name, date, location, extra_info, associated_staff_member, tz) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", name, timestamp, location, extra_info, associated_staff_member, timezone).fetch_one(conn).await.context(MakeQuerySnafu)?.id)
     }
@@ -148,9 +149,8 @@ impl DataType for Event {
     }
 }
 
-
 impl Event {
-    pub async fn get_future_events (pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+    pub async fn get_future_events(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
@@ -161,14 +161,15 @@ impl Event {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
-    pub async fn get_past_events (pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
+    pub async fn get_past_events(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
-        let ids = sqlx::query!("SELECT id FROM public.events WHERE date <= NOW() ORDER BY date DESC")
-            .fetch(&mut *first_conn)
-            .map(|result| result.map(|record| record.id))
-            .boxed();
+        let ids =
+            sqlx::query!("SELECT id FROM public.events WHERE date <= NOW() ORDER BY date DESC")
+                .fetch(&mut *first_conn)
+                .map(|result| result.map(|record| record.id))
+                .boxed();
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 }
