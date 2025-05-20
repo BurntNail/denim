@@ -208,7 +208,7 @@ pub async fn internal_get_event_in_detail(
                 }
                 p class="text-gray-200 font-semibold" {
                     "Time: "
-                    span class="font-medium" {(dlc.long_ymdet(event.datetime)?)}
+                    span class="font-medium" {(dlc.long_ymdet(&event.datetime)?)}
                 }
                 @if can_view_sensitives {
                     @if let Some(staff) = event.associated_staff_member {
@@ -256,7 +256,7 @@ pub async fn internal_get_events(
                 }
             },
             {
-                PreEscaped(dlc.short_ymdet(evt.datetime)?)
+                PreEscaped(dlc.short_ymdet(&evt.datetime)?)
             },
             html!{
                 @if let Some(location) = evt.location {

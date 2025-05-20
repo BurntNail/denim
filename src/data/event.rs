@@ -46,6 +46,8 @@ impl DataType for Event {
             Some(id) => User::get_from_db_by_id(id, &mut *conn).await?,
             None => None,
         };
+        
+        let timezone = TimeZone::get(&most_bits.tz).context(InvalidTimezoneSnafu {tz: most_bits.tz})?;
 
         #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let datetime = {
@@ -55,10 +57,7 @@ impl DataType for Event {
                 date.nanosecond() as _
             )
                 .expect("`date` guarantees timestamps are in valid intervals")
-                .in_tz(&most_bits.tz)
-                .context(InvalidTimezoneSnafu {
-                    tz: most_bits.tz
-                })?
+                .to_zoned(timezone)
         };
 
         Ok(Some(Self {

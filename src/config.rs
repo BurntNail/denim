@@ -187,6 +187,12 @@ pub struct DateLocaleConfig {
     dtf_prefs: DateTimeFormatterPreferences,
 }
 
+pub enum DateFormat {
+    ShortYMDET,
+    LongYMDET,
+    ShortYMD
+}
+
 impl DateLocaleConfig {
     pub fn new ( timezone: String, locale: String, hour_cycle: String, calendar_algorithm: String) -> DenimResult<Self> {
         let timezone = TimeZone::get(&timezone).context(InvalidTimezoneSnafu {
@@ -225,52 +231,67 @@ impl DateLocaleConfig {
     }
 
     //TODO: optimise these to not re-gen every run
-    pub fn short_ymdet (&self, zoned: Zoned) -> DenimResult<String> {
-        let zoned = zoned.with_time_zone(self.timezone.clone());
-        let zdt = ZonedDateTime::convert_from(&zoned);
-
-        let short_ymdet_formatter = DateTimeFormatter::try_new(
-            self.dtf_prefs,
-            {
-                let mut fieldset = YMDET::short();
-                fieldset.alignment = Some(Alignment::Column);
-                fieldset.time_precision = Some(TimePrecision::Minute);
-                fieldset
+    pub fn format (&self, zoned: &Zoned, date_format: DateFormat, set_to_global_timezone: bool) -> DenimResult<String> {
+        let zdt = if set_to_global_timezone {
+            let new_tz = zoned.with_time_zone(self.timezone.clone());
+            ZonedDateTime::convert_from(&new_tz)
+        } else {
+            ZonedDateTime::convert_from(zoned)
+        };
+        
+        Ok(match date_format {
+            DateFormat::ShortYMDET => {
+                DateTimeFormatter::try_new(
+                    self.dtf_prefs,
+                    {
+                        let mut fieldset = YMDET::short();
+                        fieldset.alignment = Some(Alignment::Column);
+                        fieldset.time_precision = Some(TimePrecision::Minute);
+                        fieldset
+                    }
+                )
+                    .context(BadDateTimeFormatterSnafu)?
+                    .format(&zdt)
+                    .to_string()
+            },
+            DateFormat::LongYMDET => {
+                DateTimeFormatter::try_new(
+                    self.dtf_prefs,
+                    {
+                        let mut fieldset = YMDET::long();
+                        fieldset.alignment = Some(Alignment::Column);
+                        fieldset.time_precision = Some(TimePrecision::Minute);
+                        fieldset
+                    }
+                )
+                    .context(BadDateTimeFormatterSnafu)?
+                    .format(&zdt)
+                    .to_string()
+            },
+            DateFormat::ShortYMD => {
+                DateTimeFormatter::try_new(
+                    self.dtf_prefs,
+                    {
+                        let mut fieldset = YMD::short();
+                        fieldset.alignment = Some(Alignment::Column);
+                        fieldset
+                    }
+                )
+                    .context(BadDateTimeFormatterSnafu)?
+                    .format(&zdt)
+                    .to_string()
             }
-        ).context(BadDateTimeFormatterSnafu)?;
-
-        Ok(short_ymdet_formatter.format(&zdt).to_string())
+        })
     }
-    pub fn long_ymdet (&self, zoned: Zoned) -> DenimResult<String> {
-        let zoned = zoned.with_time_zone(self.timezone.clone());
-        let zdt = ZonedDateTime::convert_from(&zoned);
 
-        let long_ymdet_formatter = DateTimeFormatter::try_new(
-            self.dtf_prefs,
-            {
-                let mut fieldset = YMDET::long();
-                fieldset.alignment = Some(Alignment::Column);
-                fieldset.time_precision = Some(TimePrecision::Minute);
-                fieldset
-            }
-        ).context(BadDateTimeFormatterSnafu)?;
-
-        Ok(long_ymdet_formatter.format(&zdt).to_string())
+    pub fn short_ymdet (&self, zoned: &Zoned) -> DenimResult<String> {
+        self.format(zoned, DateFormat::ShortYMDET, true)
+    }
+    pub fn long_ymdet (&self, zoned: &Zoned) -> DenimResult<String> {
+        self.format(zoned, DateFormat::LongYMDET, true)
     }
     
-    pub fn short_ymd (&self, zoned: Zoned) -> DenimResult<String> {
-        let zoned = zoned.with_time_zone(self.timezone.clone());
-        let zdt = ZonedDateTime::convert_from(&zoned);
-
-        let short_ymd_formatter = DateTimeFormatter::try_new(
-            self.dtf_prefs,
-            {
-                let mut fieldset = YMD::short();
-                fieldset.alignment = Some(Alignment::Column);
-                fieldset
-            }
-        ).context(BadDateTimeFormatterSnafu)?;
-
-        Ok(short_ymd_formatter.format(&zdt).to_string())
+    pub fn short_ymd (&self, zoned: &Zoned) -> DenimResult<String> {
+        self.format(zoned, DateFormat::ShortYMD, true)
     }
 }

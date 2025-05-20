@@ -9,6 +9,7 @@ use axum::extract::{Path, State};
 use maud::{Markup, html};
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
+use crate::config::DateFormat;
 
 pub async fn get_event(
     State(state): State<DenimState>,
@@ -64,7 +65,16 @@ pub async fn get_event(
                 div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" {
                     div {
                         p class="text-gray-300 text-sm" {"Date:"}
-                        p class="text-gray-100 text-lg" {(dlc.long_ymdet(event.datetime)?)}
+                        p class="text-gray-100 text-lg" {(dlc.long_ymdet(&event.datetime)?)}
+                        @if let Some((event_tz, global_tz)) = event.datetime.time_zone().iana_name().zip(dlc.timezone.iana_name()) {
+                            @if event_tz != global_tz {
+                                p class="text-gray-100 text-md" {
+                                    "Local Time (" 
+                                    span class="italic" {(event_tz)}
+                                    "): "(dlc.format(&event.datetime, DateFormat::ShortYMDET, false)?)
+                                }
+                            }
+                        }
                     }
                     div {
                         p class="text-gray-300 text-sm" {"Location:"}

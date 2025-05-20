@@ -134,7 +134,7 @@ pub async fn internal_get_profile_student_display(
                     a href={"/event/" (event.id)} class="underline text-blue-300" {(event.name)}
                 },
                 html! {
-                    (dlc.short_ymd(event.datetime)?)
+                    (dlc.short_ymd(&event.datetime)?)
                 },
             ]);
         }
