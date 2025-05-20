@@ -556,7 +556,7 @@ pub async fn internal_post_setup_auth_config(
         if lower > upper || lower == 0 || upper == 0 || upper > 1_000_000_000 {
             errors |= AuthConfigFailure::WL_OOR;
         } else {
-            current_config.word_len_range = lower..upper;
+            current_config.numbers_range = lower..upper;
         }
     }
 
