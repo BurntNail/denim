@@ -155,7 +155,7 @@ pub async fn get_import_export_page(
                                         ["tutor_email", "tutor@example.org", "✅"]
                                     ]
                                 ))
-                                p class="italic" {"NB: Missing houses, tutors and tutor groups are auto-magically added."}
+                                p class="italic" {"NB: Missing houses and tutor groups are auto-magically created."}
                                 br;
                                 form hx-put="/import_export/import_people" hx-swap="innerHTML" hx-target="#import_people_forms" hx-encoding="multipart/form-data" {
                                     label for="people_csv" class="block text-sm font-medium text-gray-400 mb-2" {"Upload Students CSV"}
@@ -366,7 +366,6 @@ pub async fn put_add_new_students(
         pref_name: String,
         surname: String,
         email: EmailAddress,
-        house: i32,
         tutor_group: Uuid,
     }
 
@@ -394,7 +393,7 @@ pub async fn put_add_new_students(
     let mut tutor_group_lookup: HashMap<_, _> = TutorGroup::get_all(&state)
         .await?
         .into_iter()
-        .map(|tutor_group| (tutor_group.staff_member.email, tutor_group.id))
+        .map(|tutor_group| ((tutor_group.staff_member.email, tutor_group.house_id), tutor_group.id))
         .collect();
 
     let existing_teachers: HashMap<_, _> = User::get_all_staff(&state)
@@ -445,7 +444,7 @@ pub async fn put_add_new_students(
                 new_index
             };
 
-            let tutor_group = if let Some(id) = tutor_group_lookup.get(&tutor_email) {
+            let tutor_group = if let Some(id) = tutor_group_lookup.get(&(tutor_email.clone(), house)) {
                 *id
             } else if let Some(teacher_id) = existing_teachers.get(&tutor_email) {
                 let new_index = TutorGroup::insert_into_database(
@@ -457,7 +456,7 @@ pub async fn put_add_new_students(
                 )
                 .await?;
 
-                tutor_group_lookup.insert(tutor_email, new_index);
+                tutor_group_lookup.insert((tutor_email, house), new_index);
                 new_index
             } else {
                 teachers_to_add.insert(tutor_email);
@@ -469,7 +468,6 @@ pub async fn put_add_new_students(
                 pref_name,
                 surname,
                 email,
-                house,
                 tutor_group,
             });
         }
@@ -531,7 +529,6 @@ pub async fn put_add_new_students(
                         pref_name,
                         surname,
                         email,
-                        house,
                         tutor_group,
                     },
                     password,
@@ -546,7 +543,7 @@ pub async fn put_add_new_students(
                         email: email.clone(),
                         password: Some(password.clone().into()),
                         current_password_is_default: true,
-                        user_kind: AddUserKind::Student { tutor_group, house },
+                        user_kind: AddUserKind::Student { tutor_group },
                     },
                     &mut pg_connection,
                 )

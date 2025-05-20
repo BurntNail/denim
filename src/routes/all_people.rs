@@ -100,7 +100,6 @@ pub async fn internal_get_add_student_form(
         .collect();
 
     snafu::ensure!(!tutor_groups.is_empty(), NoHousesOrNoTutorGroupsSnafu);
-    snafu::ensure!(!houses.is_empty(), NoHousesOrNoTutorGroupsSnafu);
 
     Ok(html! {
         (title("Add New Student"))
@@ -120,13 +119,6 @@ pub async fn internal_get_add_student_form(
                 select id="tutor_group" name="tutor_group" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
                     @for tutor_group in tutor_groups {
                         option value={(tutor_group.id)} {(house_names_by_id[&tutor_group.house_id]) " - " (tutor_group.staff_member)}
-                    }
-                }
-            }))
-            (form_element("house", "House", html!{
-                select id="house" name="house" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600" {
-                    @for house in houses {
-                        option value={(house.id)} {(house.name)}
                     }
                 }
             }))
@@ -212,7 +204,6 @@ pub struct NewStudentForm {
     email: String,
     generate_password: Option<String>,
     tutor_group: Uuid,
-    house: i32,
 }
 pub async fn internal_put_new_student(
     State(state): State<DenimState>,
@@ -254,7 +245,6 @@ pub async fn internal_put_new_student(
         current_password_is_default: true,
         user_kind: AddUserKind::Student {
             tutor_group: form.tutor_group,
-            house: form.house,
         },
     };
 

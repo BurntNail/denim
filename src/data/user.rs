@@ -58,7 +58,7 @@ pub struct AddPerson {
 }
 
 pub enum AddUserKind {
-    Student { tutor_group: Uuid, house: i32 },
+    Student { tutor_group: <TutorGroup as DataType>::Id },
     Staff,
     Dev,
 }
@@ -105,10 +105,11 @@ impl DataType for User {
             .context(MissingTutorGroupSnafu {
                 id: record.tutor_group_id,
             })?;
-            let house = HouseGroup::get_from_db_by_id(record.house_id, &mut *conn)
+            
+            let house = HouseGroup::get_from_db_by_id(tutor_group.house_id, &mut *conn)
                 .await?
                 .context(MissingHouseGroupSnafu {
-                    id: record.house_id,
+                    id: tutor_group.house_id,
                 })?;
 
             let events_participated = sqlx::query!(
@@ -195,12 +196,11 @@ impl DataType for User {
             first_name, pref_name, surname, email.as_str(), bcrypt_hashed_password, current_password_is_default)
             .fetch_one(&mut *conn).await.context(MakeQuerySnafu)?.id;
         match user_kind {
-            AddUserKind::Student { tutor_group, house } => {
+            AddUserKind::Student { tutor_group } => {
                 sqlx::query!(
-                    "INSERT INTO public.students (user_id, tutor_group_id, house_id) VALUES ($1, $2, $3)",
+                    "INSERT INTO public.students (user_id, tutor_group_id) VALUES ($1, $2)",
                     id,
                     tutor_group,
-                    house
                 )
                 .execute(&mut *conn)
                 .await
