@@ -27,7 +27,7 @@ use s3::{Bucket, Region, creds::Credentials};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use snafu::ResultExt;
-use crate::config::DateLocaleConfig;
+use crate::config::{auth::AuthConfig, date_locale::DateLocaleConfig};
 use crate::maud_conveniences::timezone_picker;
 
 bitflags! {
@@ -232,6 +232,8 @@ async fn internal_get_setup_s3(
     session: DenimSession,
     failure: S3Failure,
 ) -> DenimResult<Markup> {
+    //TODO: ensure users can somehow change the S3-settable values after the first run-through
+    
     if state.config().s3_bucket().exists() {
         return internal_get_setup_auth_config(State(state), session, AuthConfigFailure::empty())
             .await;
@@ -426,9 +428,17 @@ async fn internal_get_setup_auth_config(
     failure: AuthConfigFailure,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-
-    let auth_config = state.config().auth_config().await.clone();
-
+    
+    match state.config().auth_config().try_set_from_bucket(&*state.config().s3_bucket().get()?).await {
+        Ok(true) => return internal_get_setup_timezone(State(state), session).await,
+        Ok(false) => {},
+        Err(e) => {
+            warn!(?e, "Error trying to get auth config from bucket");
+        }
+    }
+    
+    let auth_config = AuthConfig::default();
+        
     let [
         wordlen_lower,
         worldlen_upper,
@@ -498,7 +508,7 @@ pub async fn internal_post_setup_auth_config(
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
 
     let mut errors = AuthConfigFailure::empty();
-    let mut current_config = state.config().auth_config().await.clone();
+    let mut current_config = AuthConfig::default();
 
     {
         let lower = match input.wordlen_lower.parse() {
@@ -549,17 +559,21 @@ pub async fn internal_post_setup_auth_config(
         return internal_get_setup_auth_config(State(state), session, errors).await;
     }
 
-    state.config().set_auth_config(current_config).await;
+    let _ = state.config().auth_config().set(current_config);
 
-    internal_get_setup_timezone(State(state), session)
+    internal_get_setup_timezone(State(state), session).await
 }
 
-fn internal_get_setup_timezone (State(state): State<DenimState>, session: DenimSession) -> DenimResult<Markup> {
+async fn internal_get_setup_timezone (State(state): State<DenimState>, session: DenimSession) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-    if state.config().date_locale_config().exists() {
-        return Ok(get_all_finished());
+    
+    match state.config().date_locale_config().try_set_from_bucket(&*state.config().s3_bucket().get()?).await {
+        Ok(true) => return Ok(get_all_finished()),
+        Ok(false) => {},
+        Err(e) => {
+            warn!(?e, "Error trying to get date-locale config from bucket");
+        }
     }
-
 
     Ok(html! {
         (title("Setup Timezone"))

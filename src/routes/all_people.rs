@@ -179,7 +179,7 @@ pub async fn internal_put_new_staff_or_dev(
         Some(state
             .config()
             .auth_config()
-            .await
+            .get()?
             .generate()
             .map(Into::into)?)
     } else {
@@ -223,7 +223,7 @@ pub async fn internal_put_new_student(
         Some(state
             .config()
             .auth_config()
-            .await
+            .get()?
             .generate()
             .map(Into::into)?)
     } else {

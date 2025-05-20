@@ -133,7 +133,7 @@ pub fn timezone_picker (current: Option<TimeZone>) -> Markup {
             warn!(?e, "Failed to get system timezone");
             None
         }
-    }, |def| Some(def));
+    }, Some);
 
     let current_is_system = |test: &TimeZoneName| {
         let Ok(actual_tz) = TimeZone::get(test.as_str()) else {

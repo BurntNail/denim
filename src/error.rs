@@ -9,7 +9,7 @@ use std::num::ParseIntError;
 use icu::datetime::DateTimeFormatterLoadError;
 use rand::{rng, Rng};
 use uuid::Uuid;
-use crate::config::ImportantItemTy;
+use crate::config::important_item::ImportantItemTy;
 
 pub type DenimResult<T> = Result<T, DenimError>;
 

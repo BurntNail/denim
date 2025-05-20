@@ -55,14 +55,14 @@ pub async fn internal_get_add_events_form(
     session.ensure_can(PermissionsTarget::CRUD_EVENTS)?;
 
     let staff = User::get_all_staff(&state).await?;
-    let dlc = state.config().date_locale_config().get().cloned().ok();
+    let dlc = state.config().date_locale_config().get().ok();
 
     Ok(html! {
         (title("Add New Event Form"))
         form hx-put="/events" hx-trigger="submit" hx-target="#in_focus" class="p-4" {
             (simple_form_element("name", "Name", true, None, None))
             (simple_form_element("date", "Date/Time", true, Some("datetime-local"), None))
-            (timezone_picker(dlc.map(|x| x.timezone)))
+            (timezone_picker(dlc.map(|x| x.timezone.clone())))
             (simple_form_element("location", "Location (optional)", false, None, None))
             (form_element("extra_info", "Extra Information (optional)", html!{
                 textarea id="extra_info" name="extra_info" rows="2" class="w-full bg-gray-700 text-gray-100 rounded px-4 py-2 border border-gray-600 focus:outline-none focus:ring focus:ring-blue-500 placeholder-gray-400 resize-y" {}
@@ -191,8 +191,7 @@ pub async fn internal_get_event_in_detail(
     let can_view_sensitives = session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS);
     let can_delete = session.can(PermissionsTarget::CRUD_EVENTS);
     
-    let dlc = state.config().date_locale_config();
-    let dlc = dlc.get()?;
+    let dlc = state.config().date_locale_config().get()?;
     
     Ok(html! {
         div hx-get="/internal/get_event" hx-target="#in_focus" hx-vals={"{\"id\": \"" (id) "\"}" } hx-trigger="sse:crud_event" {
@@ -245,8 +244,7 @@ pub async fn internal_get_events(
     State(state): State<DenimState>,
     Query(FuturePastFilterQuery { future, past }): Query<FuturePastFilterQuery>,
 ) -> DenimResult<Markup> {
-    let dlc = state.config().date_locale_config();
-    let dlc = dlc.get()?;
+    let dlc = state.config().date_locale_config().get()?;
     
     let event_to_row = |evt: Event| {
         Ok::<_, DenimError>([

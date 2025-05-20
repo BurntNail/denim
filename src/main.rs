@@ -38,10 +38,7 @@ use crate::{
     },
     state::DenimState,
 };
-use axum::{
-    Router,
-    routing::{get, post, put},
-};
+use axum::{Router, routing::{get, post, put}};
 use axum_login::{
     AuthManagerLayerBuilder,
     tower_sessions::{Expiry, SessionManagerLayer, cookie::time::Duration},
@@ -49,6 +46,7 @@ use axum_login::{
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use tokio::net::TcpListener;
+use tokio::signal;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use crate::routes::new_admin_flow::internal_post_setup_timezone;
@@ -63,6 +61,35 @@ mod error;
 mod maud_conveniences;
 mod routes;
 mod state;
+
+async fn shutdown_signal(state: DenimState) {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {},
+        () = terminate => {},
+    }
+
+    if let Err(e) = state.sensible_shutdown().await {
+        error!(?e, "Error sensibly shutting down");
+    }
+    warn!("signal received, starting graceful shutdown");
+}
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
@@ -182,7 +209,7 @@ async fn main() {
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)
         .layer(trace_layer)
-        .with_state(state);
+        .with_state(state.clone());
 
     let server_ip = env::var("DENIM_SERVER_IP").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
     let listener = TcpListener::bind(&server_ip)
@@ -191,6 +218,7 @@ async fn main() {
 
     info!(?server_ip, "Listening");
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(state))
         .await
         .expect("unable to serve app");
 }

@@ -251,7 +251,7 @@ pub async fn put_add_new_events(
         BASE64_URL_SAFE.encode(rmp_serde::to_vec(&draft_events).context(RmpSerdeEncodeSnafu)?);
 
     let staff = User::get_all_staff(&state).await?;
-    let dlc = state.config().date_locale_config().get().cloned().ok();
+    let dlc = state.config().date_locale_config().get().ok();
 
     Ok(html! {
         p class="text-italic p-4" {"Successfully read " (draft_events.len()) " events."}
@@ -267,7 +267,7 @@ pub async fn put_add_new_events(
                     }
                 }
             }))
-            (timezone_picker(dlc.map(|x| x.timezone)))
+            (timezone_picker(dlc.map(|x| x.timezone.clone())))
 
             (form_submit_button(Some("Confirm Import Events")))
         }
@@ -499,7 +499,8 @@ pub async fn put_add_new_students(
 
     let (passwords, csv_password) = {
         #[allow(clippy::significant_drop_tightening)]
-        let auth_config = state.config().auth_config().await;
+        let auth_config = state.config().auth_config();
+        let auth_config = auth_config.get()?;
 
         let mut passwords = (0..=students_to_add.len())
             .map(|_| auth_config.generate())
@@ -582,8 +583,7 @@ pub async fn put_add_new_students(
                 .expect("unable to write passwords to mock zip file");
             zip.finish().context(ZipSnafu)?;
 
-            let bucket = state.config().s3_bucket();
-            let bucket = bucket.get()?; //the bucket references the important item, so split over two lines ig
+            let bucket = state.config().s3_bucket().get()?;
             bucket
                 .put_object_with_content_type(
                     "latest_passwords.zip",

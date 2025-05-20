@@ -1201,6 +1201,7 @@ dependencies = [
  "icu_locale_core",
  "icu_provider 2.0.0",
  "ixdtf",
+ "serde",
  "tinystr 0.8.1",
  "writeable 0.6.1",
  "zerovec 0.11.2",
@@ -1225,6 +1226,7 @@ dependencies = [
  "icu_properties 2.0.0",
  "icu_provider 2.0.0",
  "potential_utf",
+ "serde",
  "writeable 0.6.1",
  "zerovec 0.11.2",
 ]
@@ -1249,6 +1251,7 @@ dependencies = [
  "icu_normalizer 2.0.0",
  "icu_properties 2.0.0",
  "icu_provider 2.0.0",
+ "serde",
  "smallvec",
  "utf16_iter",
  "utf8_iter",
@@ -1281,6 +1284,7 @@ checksum = "200072f5d0e3614556f94a9930d5dc3e0662a652823904c3a75dc3b0af7fee47"
 dependencies = [
  "displaydoc",
  "potential_utf",
+ "serde",
  "yoke 0.8.0",
  "zerofrom",
  "zerovec 0.11.2",
@@ -1304,7 +1308,9 @@ dependencies = [
  "icu_plurals",
  "icu_provider 2.0.0",
  "icu_time",
+ "litemap 0.8.0",
  "potential_utf",
+ "serde",
  "smallvec",
  "tinystr 0.8.1",
  "writeable 0.6.1",
@@ -1367,6 +1373,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "potential_utf",
+ "serde",
  "smallvec",
  "tinystr 0.8.1",
  "writeable 0.6.1",
@@ -1415,6 +1422,7 @@ dependencies = [
  "icu_locale_data",
  "icu_provider 2.0.0",
  "potential_utf",
+ "serde",
  "tinystr 0.8.1",
  "zerovec 0.11.2",
 ]
@@ -1427,6 +1435,7 @@ checksum = "0cde2700ccaed3872079a65fb1a78f6c0a36c91570f28755dda67bc8f7d9f00a"
 dependencies = [
  "displaydoc",
  "litemap 0.8.0",
+ "serde",
  "tinystr 0.8.1",
  "writeable 0.6.1",
  "zerovec 0.11.2",
@@ -1500,6 +1509,7 @@ dependencies = [
  "icu_normalizer_data 2.0.0",
  "icu_properties 2.0.0",
  "icu_provider 2.0.0",
+ "serde",
  "smallvec",
  "utf16_iter",
  "utf8_iter",
@@ -1527,6 +1537,7 @@ checksum = "983825f401e6bc4a13c45d552ffd9ad6f3f6b6bc0ec03f31d6835a90a46deb1f"
 dependencies = [
  "displaydoc",
  "either",
+ "serde",
  "writeable 0.6.1",
  "yoke 0.8.0",
  "zerovec 0.11.2",
@@ -1543,6 +1554,7 @@ dependencies = [
  "icu_locale",
  "icu_plurals_data",
  "icu_provider 2.0.0",
+ "serde",
  "zerovec 0.11.2",
 ]
 
@@ -1579,6 +1591,7 @@ dependencies = [
  "icu_properties_data 2.0.0",
  "icu_provider 2.0.0",
  "potential_utf",
+ "serde",
  "zerotrie",
  "zerovec 0.11.2",
 ]
@@ -1620,6 +1633,7 @@ checksum = "03c80da27b5f4187909049ee2d72f276f0d9f99a42c306bd0131ecfe04d8e5af"
 dependencies = [
  "displaydoc",
  "icu_locale_core",
+ "serde",
  "stable_deref_trait",
  "tinystr 0.8.1",
  "writeable 0.6.1",
@@ -1654,6 +1668,7 @@ dependencies = [
  "icu_provider 2.0.0",
  "icu_segmenter_data",
  "potential_utf",
+ "serde",
  "utf8_iter",
  "zerovec 0.11.2",
 ]
@@ -1884,6 +1899,9 @@ name = "litemap"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "lock_api"
@@ -3302,6 +3320,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d4f6d1145dcb577acf783d4e601bc1d76a13337bb54e6233add580b07344c8b"
 dependencies = [
  "displaydoc",
+ "serde",
  "zerovec 0.11.2",
 ]
 
@@ -4090,8 +4109,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36f0bbd478583f79edad978b407914f61b2972f5af6fa089686016be8f9af595"
 dependencies = [
  "displaydoc",
+ "litemap 0.8.0",
+ "serde",
  "yoke 0.8.0",
  "zerofrom",
+ "zerovec 0.11.2",
 ]
 
 [[package]]
@@ -4111,6 +4133,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a05eb080e015ba39cc9e23bbe5e7fb04d5fb040350f99f34e338d5fdd294428"
 dependencies = [
+ "serde",
  "yoke 0.8.0",
  "zerofrom",
  "zerovec-derive 0.11.1",

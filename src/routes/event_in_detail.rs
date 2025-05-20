@@ -9,8 +9,9 @@ use axum::extract::{Path, State};
 use maud::{Markup, html};
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
-use crate::config::DateFormat;
+use crate::config::date_locale::DateFormat;
 
+#[allow(clippy::too_many_lines)]
 pub async fn get_event(
     State(state): State<DenimState>,
     session: DenimSession,
@@ -54,8 +55,7 @@ pub async fn get_event(
         }
     });
 
-    let dlc = state.config().date_locale_config();
-    let dlc = dlc.get()?;
+    let dlc = state.config().date_locale_config().get()?;
     
     Ok(state.render(session, html!{
         div class="container mx-auto px-4 py-8" {

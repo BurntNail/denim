@@ -174,6 +174,12 @@ impl DenimState {
     pub fn send_sse_event(&self, event: SseEvent) {
         let _ = self.sse_events_sender.send(event);
     }
+    
+    pub async fn sensible_shutdown (&self) -> DenimResult<()> {
+        self.config.save().await?;
+        
+        Ok(())
+    }
 }
 
 impl Deref for DenimState {

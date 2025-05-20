@@ -122,8 +122,7 @@ pub async fn internal_get_profile_student_display(
 
     let mut event_details = Vec::with_capacity(events_participated.len());
     
-    let dlc = state.config().date_locale_config();
-    let dlc = dlc.get()?;
+    let dlc = state.config().date_locale_config().get()?;
     
     for event in events_participated {
         if let Some(event) =
