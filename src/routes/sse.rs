@@ -9,11 +9,13 @@ use axum::{
 use futures::Stream;
 use std::convert::Infallible;
 use tokio_stream::{StreamExt, wrappers::BroadcastStream};
+use uuid::Uuid;
 
 #[derive(Copy, Clone, Debug)]
 pub enum SseEvent {
     CrudEvent,
     CrudPerson,
+    ChangeSignUp(Uuid),
 }
 
 impl From<SseEvent> for AxumSseEvent {
@@ -21,6 +23,9 @@ impl From<SseEvent> for AxumSseEvent {
         match value {
             SseEvent::CrudEvent => Self::default().event("crud_event").data(""),
             SseEvent::CrudPerson => Self::default().event("crud_person").data(""),
+            SseEvent::ChangeSignUp(uuid) => Self::default()
+                .event(format!("change_sign_up_{uuid}"))
+                .data(""), //TODO: get the UUID into the data?
         }
     }
 }

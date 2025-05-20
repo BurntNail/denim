@@ -28,12 +28,11 @@ pub async fn get_login(
     session: DenimSession,
     Query(LoginOptions { to, login_failed }): Query<LoginOptions>,
 ) -> DenimResult<Response<Body>> {
-    if !sqlx::query!("SELECT exists(SELECT 1 FROM public.admins)")
+    if !sqlx::query!("SELECT exists(SELECT 1 FROM public.admins) as \"exists!\"")
         .fetch_one(&mut *state.get_connection().await?)
         .await
         .context(MakeQuerySnafu)?
         .exists
-        .unwrap_or(false)
     {
         return Ok(Redirect::to("/onboarding").into_response());
     }

@@ -29,6 +29,13 @@ pub struct AddEvent {
     pub associated_staff_member: Option<Uuid>,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum EventSignUpState {
+    Nothing,
+    SignedUp,
+    Verified,
+}
+
 impl DataType for Event {
     type Id = Uuid;
     type FormForId = IdForm;
@@ -94,14 +101,13 @@ impl DataType for Event {
         //verify that the staff member exists :)
         if let Some(asm) = &associated_staff_member {
             if !sqlx::query!(
-                "SELECT exists(SELECT 1 FROM public.staff WHERE user_id = $1)",
+                "SELECT exists(SELECT 1 FROM public.staff WHERE user_id = $1) as \"exists!\"",
                 asm
             )
             .fetch_one(&mut *conn)
             .await
             .context(MakeQuerySnafu)?
             .exists
-            .unwrap_or(false)
             {
                 return Err(DenimError::MissingUser { id: *asm });
             }
@@ -171,5 +177,33 @@ impl Event {
                 .map(|result| result.map(|record| record.id))
                 .boxed();
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
+    }
+
+    pub async fn user_is_signed_up_to_event(
+        event_id: Uuid,
+        student_id: Uuid,
+        conn: &mut PgConnection,
+    ) -> DenimResult<Option<EventSignUpState>> {
+        if !sqlx::query!(
+            "SELECT EXISTS(SELECT 1 FROM public.students WHERE user_id = $1)  as \"exists!\"",
+            student_id
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .context(MakeQuerySnafu)?
+        .exists
+        {
+            return Ok(None);
+        }
+
+        Ok(Some(match sqlx::query!("SELECT is_verified FROM public.participation WHERE event_id = $1 AND student_id = $2", event_id, student_id)
+            .fetch_optional(conn)
+            .await
+            .context(MakeQuerySnafu)?
+            .map(|rec| rec.is_verified) {
+            None => EventSignUpState::Nothing,
+            Some(false) => EventSignUpState::SignedUp,
+            Some(true) => EventSignUpState::Verified,
+        }))
     }
 }

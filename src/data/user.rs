@@ -58,7 +58,9 @@ pub struct AddPerson {
 }
 
 pub enum AddUserKind {
-    Student { tutor_group: <TutorGroup as DataType>::Id },
+    Student {
+        tutor_group: <TutorGroup as DataType>::Id,
+    },
     Staff,
     Dev,
 }
@@ -105,7 +107,7 @@ impl DataType for User {
             .context(MissingTutorGroupSnafu {
                 id: record.tutor_group_id,
             })?;
-            
+
             let house = HouseGroup::get_from_db_by_id(tutor_group.house_id, &mut *conn)
                 .await?
                 .context(MissingHouseGroupSnafu {
@@ -244,8 +246,7 @@ impl UserKind {
                     | PermissionsTarget::SIGN_SELF_UP
             }
             Self::Staff => {
-                PermissionsTarget::SIGN_SELF_UP
-                    | PermissionsTarget::SIGN_OTHERS_UP
+                PermissionsTarget::SIGN_OTHERS_UP
                     | PermissionsTarget::VERIFY_ATTENDANCE
                     | PermissionsTarget::CRUD_EVENTS
                     | PermissionsTarget::CRUD_USERS
@@ -253,7 +254,7 @@ impl UserKind {
                     | PermissionsTarget::EXPORT_CSVS
                     | PermissionsTarget::VIEW_SENSITIVE_DETAILS
             }
-            Self::Admin => PermissionsTarget::all(),
+            Self::Admin => PermissionsTarget::all() - PermissionsTarget::SIGN_SELF_UP,
         }
     }
 }

@@ -1,6 +1,9 @@
 use crate::error::DenimResult;
 use s3::Bucket;
-use std::sync::{Arc, OnceLock};
+use std::{
+    fmt::Debug,
+    sync::{Arc, OnceLock},
+};
 
 #[derive(Copy, Clone, Debug)]
 pub enum ImportantItemTy {
@@ -41,6 +44,7 @@ impl<T: ImportantItem> ImportantItemContainer<T> {
             Ok(None) => Ok(false),
             Err(e) => Err(e),
             Ok(Some(found)) => {
+                info!(ty = ?<T as ImportantItem>::TY, "Loaded important item");
                 let _ = self.0.set(Arc::new(found));
                 Ok(true)
             }

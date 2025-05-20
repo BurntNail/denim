@@ -25,14 +25,13 @@ impl PostgresSessionStore {
 impl PostgresSessionStore {
     async fn id_exists(id: Id, conn: &mut PgConnection) -> Result<bool, DenimError> {
         Ok(sqlx::query!(
-            "SELECT EXISTS (SELECT 1 FROM public.sessions WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM public.sessions WHERE id = $1) as \"exists!\"",
             id.to_string()
         )
         .fetch_one(conn)
         .await
         .context(MakeQuerySnafu)?
-        .exists
-        .unwrap_or(false))
+        .exists)
     }
 
     async fn save_session(record: &Record, conn: &mut PgConnection) -> Result<(), DenimError> {

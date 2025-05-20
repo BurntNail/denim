@@ -14,7 +14,10 @@ use crate::{
             internal_get_add_student_form, internal_get_people, internal_get_person_in_detail,
             internal_put_new_staff_or_dev, internal_put_new_student,
         },
-        event_in_detail::get_event,
+        event_in_detail::{
+            get_event, internal_get_signed_up, internal_get_signup_button,
+            internal_post_toggle_self_sign_up, internal_post_verify,
+        },
         import_export::{
             get_import_export_page, get_students_import_checker, put_add_new_events,
             put_add_new_students, put_fully_import_events,
@@ -206,6 +209,22 @@ async fn main() {
         .route(
             "/internal/onboarding/setup_timezone",
             post(internal_post_setup_timezone),
+        )
+        .route(
+            "/internal/event/{id}/post_toggle_self_signup",
+            post(internal_post_toggle_self_sign_up),
+        )
+        .route(
+            "/internal/event/{id}/post_verify",
+            post(internal_post_verify),
+        )
+        .route(
+            "/internal/event/{id}/signed_up_and_verified",
+            get(internal_get_signed_up),
+        )
+        .route(
+            "/internal/event/{id}/signup_button",
+            get(internal_get_signup_button),
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

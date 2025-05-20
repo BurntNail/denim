@@ -60,12 +60,11 @@ pub async fn get_start_onboarding(
     let mut replacement_internal_markup = None;
 
     //double check that no admins exist
-    if sqlx::query!("SELECT exists(SELECT 1 FROM public.admins)")
+    if sqlx::query!("SELECT exists(SELECT 1 FROM public.admins) as \"exists!\"")
         .fetch_one(&mut *state.get_connection().await?)
         .await
         .context(MakeQuerySnafu)?
         .exists
-        .unwrap_or(false)
     {
         if session.can(PermissionsTarget::RUN_ONBOARDING) {
             replacement_internal_markup = Some(
@@ -134,12 +133,11 @@ pub async fn internal_post_add_new_admin(
     let mut transaction = state.get_transaction().await?;
 
     //double check that no admins exist
-    if sqlx::query!("SELECT exists(SELECT 1 FROM public.admins)")
+    if sqlx::query!("SELECT exists(SELECT 1 FROM public.admins) as \"exists!\"")
         .fetch_one(&mut *transaction)
         .await
         .context(MakeQuerySnafu)?
         .exists
-        .unwrap_or(false)
     {
         transaction
             .rollback()

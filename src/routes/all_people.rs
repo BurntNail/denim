@@ -93,11 +93,8 @@ pub async fn internal_get_add_student_form(
     let tutor_groups = TutorGroup::get_all(&state).await?;
     let houses = HouseGroup::get_all(&state).await?;
 
-    let house_names_by_id: HashMap<i32, String> = houses
-        .clone()
-        .into_iter()
-        .map(|hg| (hg.id, hg.name))
-        .collect();
+    let house_names_by_id: HashMap<i32, String> =
+        houses.into_iter().map(|hg| (hg.id, hg.name)).collect();
 
     snafu::ensure!(!tutor_groups.is_empty(), NoHousesOrNoTutorGroupsSnafu);
 

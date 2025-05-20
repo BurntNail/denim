@@ -393,7 +393,12 @@ pub async fn put_add_new_students(
     let mut tutor_group_lookup: HashMap<_, _> = TutorGroup::get_all(&state)
         .await?
         .into_iter()
-        .map(|tutor_group| ((tutor_group.staff_member.email, tutor_group.house_id), tutor_group.id))
+        .map(|tutor_group| {
+            (
+                (tutor_group.staff_member.email, tutor_group.house_id),
+                tutor_group.id,
+            )
+        })
         .collect();
 
     let existing_teachers: HashMap<_, _> = User::get_all_staff(&state)
@@ -444,24 +449,25 @@ pub async fn put_add_new_students(
                 new_index
             };
 
-            let tutor_group = if let Some(id) = tutor_group_lookup.get(&(tutor_email.clone(), house)) {
-                *id
-            } else if let Some(teacher_id) = existing_teachers.get(&tutor_email) {
-                let new_index = TutorGroup::insert_into_database(
-                    NewTutorGroup {
-                        staff_id: *teacher_id,
-                        house_id: house,
-                    },
-                    &mut transaction,
-                )
-                .await?;
+            let tutor_group =
+                if let Some(id) = tutor_group_lookup.get(&(tutor_email.clone(), house)) {
+                    *id
+                } else if let Some(teacher_id) = existing_teachers.get(&tutor_email) {
+                    let new_index = TutorGroup::insert_into_database(
+                        NewTutorGroup {
+                            staff_id: *teacher_id,
+                            house_id: house,
+                        },
+                        &mut transaction,
+                    )
+                    .await?;
 
-                tutor_group_lookup.insert((tutor_email, house), new_index);
-                new_index
-            } else {
-                teachers_to_add.insert(tutor_email);
-                continue;
-            };
+                    tutor_group_lookup.insert((tutor_email, house), new_index);
+                    new_index
+                } else {
+                    teachers_to_add.insert(tutor_email);
+                    continue;
+                };
 
             students_to_add.push(DraftIndividualStudent {
                 first_name,
