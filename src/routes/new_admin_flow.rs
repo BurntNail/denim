@@ -237,9 +237,7 @@ async fn internal_get_setup_s3(
             .await;
     }
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-
-    let required = !cfg!(debug_assertions); //;)
-
+    
     Ok(html! {
         (title("Setup External Storage"))
         p {
@@ -263,35 +261,35 @@ async fn internal_get_setup_s3(
             (simple_form_element(
                 "access_key_id",
                 "S3 Access Key ID",
-                required,
+                true,
                 Some("password"),
                 None
             ))
             (simple_form_element(
                 "secret_access_key",
                 "S3 Secret Access Key",
-                required,
+                true,
                 Some("password"),
                 None
             ))
             (simple_form_element(
                 "endpoint",
                 "S3 Endpoint URL",
-                required,
+                true,
                 None,
                 None
             ))
             (simple_form_element(
                 "region",
                 "S3 Region",
-                required,
+                true,
                 None,
                 None
             ))
             (simple_form_element(
                 "bucket",
                 "S3 Bucket Name",
-                required,
+                true,
                 None,
                 None
             ))
@@ -346,17 +344,6 @@ pub async fn internal_post_setup_s3(
 
     let (access_key_id, secret_access_key, endpoint, region, bucket) = if errors.is_empty() {
         (access_key_id, secret_access_key, endpoint, region, bucket)
-    } else if cfg!(debug_assertions) {
-        //avoid the faff when running in dev ;)
-        let get_env_var = |name| var(name).context(BadEnvVarSnafu { name });
-
-        (
-            get_env_var("AWS_ACCESS_KEY_ID")?,
-            get_env_var("AWS_SECRET_ACCESS_KEY")?,
-            get_env_var("AWS_ENDPOINT_S3_URL")?,
-            get_env_var("AWS_REGION")?,
-            get_env_var("AWS_BUCKET_NAME")?,
-        )
     } else {
         return internal_get_setup_s3(State(state), session, errors).await;
     };

@@ -110,7 +110,7 @@ async fn main() {
     info!("`tracing` online");
 
     let options = PgPoolOptions::new().max_connections(15);
-    let config = RuntimeConfiguration::new().expect("unable to create config");
+    let config = RuntimeConfiguration::new().await.expect("unable to create config");
     let state = DenimState::new(options, config.clone())
         .await
         .expect("unable to create state");
