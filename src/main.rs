@@ -77,7 +77,7 @@ async fn shutdown_signal(state: DenimState) {
     #[cfg(unix)]
     let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
+            .expect("failed to install terminate signal handler")
             .recv()
             .await;
     };
