@@ -115,6 +115,11 @@ pub enum DenimError {
         source: icu::locale::ParseError,
         provided: String,
     },
+    #[snafu(display(
+        "Contact the programmer - transactions must be used when adding `{}`s to the database",
+        datatype_name
+    ))]
+    TransactionMustBeUsed { datatype_name: &'static str },
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -198,6 +203,7 @@ impl IntoResponse for DenimError {
             Self::InvalidHourCycle { .. } => BI,
             Self::InvalidCalendarAlgorithm { .. } => BI,
             Self::InvalidLocale { .. } => BI,
+            Self::TransactionMustBeUsed { .. } => ISE,
         };
 
         //painfully, has to return a 200 OK to get by with htmx, smh

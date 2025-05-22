@@ -1,11 +1,12 @@
-use crate::error::{DenimResult, MakeQuerySnafu};
-use futures::{StreamExt, stream::BoxStream};
+use crate::error::{CommitTransactionSnafu, DenimResult, MakeQuerySnafu};
+use futures::{TryStreamExt, stream::BoxStream};
 use serde::Deserialize;
 use snafu::ResultExt;
-use sqlx::{PgConnection, Pool, Postgres};
+use sqlx::{PgConnection, Pool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub mod event;
+mod photo;
 pub mod student_groups;
 pub mod user;
 
@@ -62,8 +63,7 @@ pub trait DataType: Sized {
     ) -> DenimResult<Vec<Self>> {
         let mut all = vec![];
 
-        while let Some(next_id) = ids.next().await {
-            let next_id = next_id.context(MakeQuerySnafu)?;
+        while let Some(next_id) = ids.try_next().await.context(MakeQuerySnafu)? {
             if let Some(next_event) = Self::get_from_db_by_id(next_id, conn).await? {
                 all.push(next_event);
             }
@@ -76,6 +76,15 @@ pub trait DataType: Sized {
         to_be_added: Self::FormForAdding,
         conn: &mut PgConnection,
     ) -> DenimResult<Self::Id>;
+
+    async fn insert_into_database_transaction(
+        to_be_added: Self::FormForAdding,
+        mut conn: Transaction<'_, Postgres>,
+    ) -> DenimResult<Self::Id> {
+        let id = Self::insert_into_database(to_be_added, &mut conn).await?;
+        conn.commit().await.context(CommitTransactionSnafu)?;
+        Ok(id)
+    }
 
     async fn remove_from_database(id: Self::Id, conn: &mut PgConnection) -> DenimResult<()>;
 }
