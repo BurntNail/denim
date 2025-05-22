@@ -4,7 +4,7 @@ use crate::{
 };
 use futures::StreamExt;
 use serde::Deserialize;
-use snafu::{ResultExt};
+use snafu::ResultExt;
 use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
 

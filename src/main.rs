@@ -15,7 +15,8 @@ use crate::{
             internal_put_new_staff_or_dev, internal_put_new_student,
         },
         event_in_detail::{
-            get_event, internal_get_signed_up, internal_get_signup_button,
+            get_event, internal_get_sign_others_up, internal_get_signed_up,
+            internal_get_signup_button, internal_post_sign_others_up,
             internal_post_toggle_self_sign_up, internal_post_verify,
         },
         import_export::{
@@ -54,7 +55,6 @@ use std::env;
 use tokio::{net::TcpListener, signal};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use crate::routes::event_in_detail::{internal_get_sign_others_up, internal_post_sign_others_up};
 
 #[macro_use]
 extern crate tracing;
@@ -111,7 +111,9 @@ async fn main() {
     info!("`tracing` online");
 
     let options = PgPoolOptions::new().max_connections(15);
-    let config = RuntimeConfiguration::new().await.expect("unable to create config");
+    let config = RuntimeConfiguration::new()
+        .await
+        .expect("unable to create config");
     let state = DenimState::new(options, config.clone())
         .await
         .expect("unable to create state");
@@ -227,8 +229,9 @@ async fn main() {
             "/internal/event/{id}/signup_button",
             get(internal_get_signup_button),
         )
-        .route("/internal/event/{id}/sign_others_up",
-            get(internal_get_sign_others_up).post(internal_post_sign_others_up)
+        .route(
+            "/internal/event/{id}/sign_others_up",
+            get(internal_get_sign_others_up).post(internal_post_sign_others_up),
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

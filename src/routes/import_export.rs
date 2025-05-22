@@ -7,9 +7,9 @@ use crate::{
         user::{AddPerson, AddUserKind, User},
     },
     error::{
-        B64Snafu, CommitTransactionSnafu, DenimError, DenimResult, InvalidTimezoneSnafu,
-        MultipartSnafu, ParseUuidSnafu, RmpSerdeDecodeSnafu, RmpSerdeEncodeSnafu,
-        RollbackTransactionSnafu, S3Snafu, UnrepresentableTimeSnafu, ZipSnafu,
+        B64Snafu, CommitTransactionSnafu, DenimError, DenimResult, EmailSnafu,
+        InvalidTimezoneSnafu, MakeQuerySnafu, MultipartSnafu, ParseUuidSnafu, RmpSerdeDecodeSnafu,
+        RmpSerdeEncodeSnafu, RollbackTransactionSnafu, S3Snafu, UnrepresentableTimeSnafu, ZipSnafu,
     },
     maud_conveniences::{
         Email, errors_list, form_element, form_submit_button, subsubtitle, table, timezone_picker,
@@ -32,13 +32,12 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Write as _,
     io::{Cursor, Write},
+    str::FromStr,
     time::Duration,
 };
-use std::str::FromStr;
 use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
-use crate::error::{EmailSnafu, MakeQuerySnafu};
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -392,18 +391,20 @@ pub async fn put_add_new_students(
         .into_iter()
         .map(|house| (house.name, house.id))
         .collect();
-    
+
     let mut tutor_group_lookup = HashMap::new();
     let mut conn = state.get_connection().await?;
     for tutor_group in TutorGroup::get_all(&state).await? {
-        let email = sqlx::query!("SELECT email FROM users WHERE id = $1", tutor_group.staff_member)
-            .fetch_one(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?;
-        
-        let proper_email_address = EmailAddress::from_str(&email.email)
-            .context(EmailSnafu)?;
-        
+        let email = sqlx::query!(
+            "SELECT email FROM users WHERE id = $1",
+            tutor_group.staff_member
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .context(MakeQuerySnafu)?;
+
+        let proper_email_address = EmailAddress::from_str(&email.email).context(EmailSnafu)?;
+
         tutor_group_lookup.insert((proper_email_address, tutor_group.house_id), tutor_group.id);
     }
 

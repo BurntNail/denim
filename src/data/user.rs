@@ -19,7 +19,7 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
-use std::{str::FromStr, sync::LazyLock, fmt::Write};
+use std::{fmt::Write, str::FromStr, sync::LazyLock};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -275,7 +275,10 @@ impl User {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
-    pub async fn get_all_staff_with_filter(pool: &Pool<Postgres>, filter: &str) -> DenimResult<Vec<Self>> {
+    pub async fn get_all_staff_with_filter(
+        pool: &Pool<Postgres>,
+        filter: &str,
+    ) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
@@ -297,7 +300,10 @@ impl User {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
-    pub async fn get_all_students_with_filter(pool: &Pool<Postgres>, filter: &str) -> DenimResult<Vec<Self>> {
+    pub async fn get_all_students_with_filter(
+        pool: &Pool<Postgres>,
+        filter: &str,
+    ) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
@@ -319,7 +325,10 @@ impl User {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
-    pub async fn get_all_admins_with_filter(pool: &Pool<Postgres>, filter: &str) -> DenimResult<Vec<Self>> {
+    pub async fn get_all_admins_with_filter(
+        pool: &Pool<Postgres>,
+        filter: &str,
+    ) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
@@ -342,8 +351,13 @@ impl Render for User {
         buffer.push_str(first_part);
         buffer.push(' ');
         buffer.push_str(&self.surname);
-        
-        if let UserKind::Student { tutor_group: _, house, events_participated: _ } = &self.kind {
+
+        if let UserKind::Student {
+            tutor_group: _,
+            house,
+            events_participated: _,
+        } = &self.kind
+        {
             let _ = write!(buffer, " ({})", house.name);
         }
     }

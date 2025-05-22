@@ -6,8 +6,8 @@ use crate::{
         user::{AddPerson, AddUserKind, User},
     },
     error::{
-        CommitTransactionSnafu, DenimResult, MakeQuerySnafu,
-        RollbackTransactionSnafu, S3CredsSnafu, S3Snafu,
+        CommitTransactionSnafu, DenimResult, MakeQuerySnafu, RollbackTransactionSnafu,
+        S3CredsSnafu, S3Snafu,
     },
     maud_conveniences::{
         errors_list, form_element, form_submit_button, simple_form_element, supertitle,
@@ -236,7 +236,7 @@ async fn internal_get_setup_s3(
             .await;
     }
     session.ensure_can(PermissionsTarget::RUN_ONBOARDING)?;
-    
+
     Ok(html! {
         (title("Setup External Storage"))
         p {
