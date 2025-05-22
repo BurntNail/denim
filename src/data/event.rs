@@ -1,3 +1,4 @@
+use futures::TryStreamExt;
 use crate::{
     data::{DataType, IdForm, user::User},
     error::{
@@ -19,6 +20,8 @@ pub struct Event {
     pub location: Option<String>,
     pub extra_info: Option<String>,
     pub associated_staff_member: Option<User>,
+    pub signed_up: Vec<Uuid>,
+    pub verified: Vec<Uuid>,
 }
 
 pub struct AddEvent {
@@ -64,6 +67,20 @@ impl DataType for Event {
                 .expect("`date` guarantees timestamps are in valid intervals")
                 .to_zoned(timezone)
         };
+        
+        
+        let mut signed_up = vec![];
+        let mut verified = vec![];
+        
+        let mut participation_stream = sqlx::query!("SELECT student_id, is_verified FROM participation WHERE event_id = $1", id)
+            .fetch(&mut *conn);
+        while let Some(record) = participation_stream.try_next().await.context(MakeQuerySnafu)? {
+            if record.is_verified {
+                verified.push(record.student_id);
+            } else {
+                signed_up.push(record.student_id);
+            }
+        }
 
         Ok(Some(Self {
             id,
@@ -72,6 +89,8 @@ impl DataType for Event {
             location: most_bits.location,
             extra_info: most_bits.extra_info,
             associated_staff_member,
+            signed_up,
+            verified
         }))
     }
 

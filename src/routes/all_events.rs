@@ -163,10 +163,7 @@ pub async fn delete_event(
     Event::remove_from_database(id, &mut *state.get_connection().await?).await?;
     let form = internal_get_add_events_form(State(state.clone()), session).await?;
 
-    //technically, there's a fun thing where in some cases the website will process the crud change BEFORE the new html
-    //and that's insanely annoying
-    //but there's kinda no nice way to fix it...
-    state.send_sse_event(SseEvent::CrudEvent);
+    state.delayed_send_sse_event(SseEvent::CrudEvent, 250);
 
     Ok(html! {
         (form)
@@ -217,6 +214,14 @@ pub async fn internal_get_event_in_detail(
                         "Extra Information: "
                         span class="font-medium" {(extra)}
                     }
+                }
+                p class="text-gray-200 font-semibold" {
+                    "Signed Up: "
+                    span class="font-medium" {(event.signed_up.len())}
+                }
+                p class="text-gray-200 font-semibold" {
+                    "Verified: "
+                    span class="font-medium" {(event.verified.len())}
                 }
                 @if can_delete {
                     br;

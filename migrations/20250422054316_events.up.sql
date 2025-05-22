@@ -16,10 +16,12 @@ CREATE TABLE participation (
     event_id uuid NOT NULL,
     CONSTRAINT event_id_fk
                            FOREIGN KEY (event_id)
-                           REFERENCES events(id),
+                           REFERENCES events(id)
+                           ON DELETE CASCADE,
 
     student_id uuid NOT NULL,
     CONSTRAINT student_id_fk
                            FOREIGN KEY (student_id)
                            REFERENCES students(user_id)
+                           ON DELETE CASCADE
 )

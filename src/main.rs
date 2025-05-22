@@ -54,6 +54,7 @@ use std::env;
 use tokio::{net::TcpListener, signal};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use crate::routes::event_in_detail::{internal_get_sign_others_up, internal_post_sign_others_up};
 
 #[macro_use]
 extern crate tracing;
@@ -225,6 +226,9 @@ async fn main() {
         .route(
             "/internal/event/{id}/signup_button",
             get(internal_get_signup_button),
+        )
+        .route("/internal/event/{id}/sign_others_up",
+            get(internal_get_sign_others_up).post(internal_post_sign_others_up)
         )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)

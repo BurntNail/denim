@@ -34,9 +34,11 @@ use std::{
     io::{Cursor, Write},
     time::Duration,
 };
+use std::str::FromStr;
 use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
+use crate::error::{EmailSnafu, MakeQuerySnafu};
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -390,16 +392,20 @@ pub async fn put_add_new_students(
         .into_iter()
         .map(|house| (house.name, house.id))
         .collect();
-    let mut tutor_group_lookup: HashMap<_, _> = TutorGroup::get_all(&state)
-        .await?
-        .into_iter()
-        .map(|tutor_group| {
-            (
-                (tutor_group.staff_member.email, tutor_group.house_id),
-                tutor_group.id,
-            )
-        })
-        .collect();
+    
+    let mut tutor_group_lookup = HashMap::new();
+    let mut conn = state.get_connection().await?;
+    for tutor_group in TutorGroup::get_all(&state).await? {
+        let email = sqlx::query!("SELECT email FROM users WHERE id = $1", tutor_group.staff_member)
+            .fetch_one(&mut *conn)
+            .await
+            .context(MakeQuerySnafu)?;
+        
+        let proper_email_address = EmailAddress::from_str(&email.email)
+            .context(EmailSnafu)?;
+        
+        tutor_group_lookup.insert((proper_email_address, tutor_group.house_id), tutor_group.id);
+    }
 
     let existing_teachers: HashMap<_, _> = User::get_all_staff(&state)
         .await?

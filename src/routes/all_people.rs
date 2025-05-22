@@ -279,20 +279,28 @@ pub async fn internal_get_people(
     Query(FilterQuery { filter }): Query<FilterQuery>,
 ) -> DenimResult<Markup> {
     session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
+    
+    let filter = filter.and_then(|filter| {
+        if filter.trim().is_empty() {
+            None
+        } else {
+            Some(filter)
+        }
+    });
 
-    let mut staff = User::get_all_staff(&state).await?;
-    let mut admins = User::get_all_admins(&state).await?;
-    let mut students = User::get_all_students(&state).await?;
-
-    let retain = |user: &User| {
-        filter
-            .as_ref()
-            .is_none_or(|filter| user.name().contains(filter))
+    let (staff, students, admins) = if let Some(filter) = &filter {
+        (
+            User::get_all_staff_with_filter(&state, filter).await?,
+            User::get_all_students_with_filter(&state, filter).await?,
+            User::get_all_admins_with_filter(&state, filter).await?
+            )
+    } else {
+        (
+            User::get_all_staff(&state).await?,
+            User::get_all_students(&state).await?,
+            User::get_all_admins(&state).await?
+            )
     };
-
-    staff.retain(retain);
-    admins.retain(retain);
-    students.retain(retain);
 
     let can_change_users = session.can(PermissionsTarget::CRUD_USERS);
     let can_change_admins = session.can(PermissionsTarget::CRUD_ADMINS);

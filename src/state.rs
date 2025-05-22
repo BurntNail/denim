@@ -14,6 +14,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
+use std::time::Duration;
 use tokio::{
     sync::{
         Mutex,
@@ -32,7 +33,7 @@ pub struct DenimState {
     sse_events_sender: Sender<SseEvent>,
     #[allow(clippy::type_complexity)]
     import_students_job: Arc<Mutex<Option<(LongJobResult, WatchRx<(usize, usize)>)>>>,
-    submit_students_job_token: Arc<AtomicBool>,
+    submit_students_job_token: Arc<AtomicBool>
 }
 
 pub struct SubmitStudentsJobToken {
@@ -173,6 +174,14 @@ impl DenimState {
 
     pub fn send_sse_event(&self, event: SseEvent) {
         let _ = self.sse_events_sender.send(event);
+    }
+    
+    pub fn delayed_send_sse_event (&self, event: SseEvent, millis: u64) {
+        let sender = self.sse_events_sender.clone();
+        tokio::task::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(millis)).await;
+            let _ = sender.send(event);
+        });
     }
 
     pub async fn sensible_shutdown(&self) -> DenimResult<()> {

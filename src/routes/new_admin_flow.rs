@@ -6,7 +6,7 @@ use crate::{
         user::{AddPerson, AddUserKind, User},
     },
     error::{
-        BadEnvVarSnafu, CommitTransactionSnafu, DenimResult, MakeQuerySnafu,
+        CommitTransactionSnafu, DenimResult, MakeQuerySnafu,
         RollbackTransactionSnafu, S3CredsSnafu, S3Snafu,
     },
     maud_conveniences::{
@@ -22,7 +22,6 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use bitflags::bitflags;
-use dotenvy::var;
 use email_address::EmailAddress;
 use maud::{Markup, html};
 use s3::{Bucket, Region, creds::Credentials};

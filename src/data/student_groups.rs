@@ -1,17 +1,17 @@
 use crate::{
-    data::{DataType, IdForm, IntIdForm, user::User},
-    error::{DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu, MissingUserSnafu},
+    data::{DataType, IdForm, IntIdForm},
+    error::{DenimResult, GetDatabaseConnectionSnafu, MakeQuerySnafu},
 };
 use futures::StreamExt;
 use serde::Deserialize;
-use snafu::{OptionExt, ResultExt};
+use snafu::{ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct TutorGroup {
     pub id: Uuid,
-    pub staff_member: Box<User>, //break infinite loop - technically I know it can't happen, but eh
+    pub staff_member: Uuid,
     pub house_id: i32,
 }
 
@@ -35,13 +35,9 @@ impl DataType for TutorGroup {
             return Ok(None);
         };
 
-        let staff_member = User::get_from_db_by_id(rec.staff_id, conn)
-            .await?
-            .context(MissingUserSnafu { id: rec.staff_id })?;
-
         Ok(Some(Self {
             id,
-            staff_member: Box::new(staff_member),
+            staff_member: rec.staff_id,
             house_id: rec.house_id,
         }))
     }

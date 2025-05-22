@@ -19,7 +19,7 @@ use maud::{Markup, Render, html};
 use secrecy::{ExposeSecret, SecretString};
 use snafu::{OptionExt, ResultExt};
 use sqlx::{PgConnection, Pool, Postgres};
-use std::{str::FromStr, sync::LazyLock};
+use std::{str::FromStr, sync::LazyLock, fmt::Write};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -275,11 +275,33 @@ impl User {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
+    pub async fn get_all_staff_with_filter(pool: &Pool<Postgres>, filter: &str) -> DenimResult<Vec<Self>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+
+        let ids = sqlx::query!("SELECT s.user_id FROM public.staff s INNER JOIN public.users u ON u.id = s.user_id WHERE LOWER(coalesce(u.pref_name, u.first_name) || ' ' || u.surname) ~ $1", filter)
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.user_id))
+            .boxed();
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
+    }
+
     pub async fn get_all_students(pool: &Pool<Postgres>) -> DenimResult<Vec<Self>> {
         let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
         let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
 
         let ids = sqlx::query!("SELECT user_id FROM public.students")
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.user_id))
+            .boxed();
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
+    }
+
+    pub async fn get_all_students_with_filter(pool: &Pool<Postgres>, filter: &str) -> DenimResult<Vec<Self>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+
+        let ids = sqlx::query!("SELECT s.user_id FROM public.students s INNER JOIN public.users u ON u.id = s.user_id WHERE LOWER(coalesce(u.pref_name, u.first_name) || ' ' || u.surname) ~ $1", filter)
             .fetch(&mut *first_conn)
             .map(|result| result.map(|record| record.user_id))
             .boxed();
@@ -297,8 +319,15 @@ impl User {
         Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 
-    pub fn name(&self) -> String {
-        self.render().0
+    pub async fn get_all_admins_with_filter(pool: &Pool<Postgres>, filter: &str) -> DenimResult<Vec<Self>> {
+        let mut first_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+        let mut second_conn = pool.acquire().await.context(GetDatabaseConnectionSnafu)?;
+
+        let ids = sqlx::query!("SELECT a.user_id FROM public.admins a INNER JOIN public.users u ON u.id = a.user_id WHERE LOWER(coalesce(u.pref_name, u.first_name) || ' ' || u.surname) ~ $1", filter)
+            .fetch(&mut *first_conn)
+            .map(|result| result.map(|record| record.user_id))
+            .boxed();
+        Self::get_from_fetch_stream_of_ids(ids, &mut second_conn).await
     }
 }
 
@@ -309,15 +338,13 @@ impl Render for User {
             .pref_name
             .as_deref()
             .unwrap_or(self.first_name.as_str());
-        let second_part = self.surname.as_str();
 
         buffer.push_str(first_part);
         buffer.push(' ');
-
-        if matches!(self.kind, UserKind::Student { .. }) {
-            buffer.push_str(&second_part[0..1]);
-        } else {
-            buffer.push_str(second_part);
+        buffer.push_str(&self.surname);
+        
+        if let UserKind::Student { tutor_group: _, house, events_participated: _ } = &self.kind {
+            let _ = write!(buffer, " ({})", house.name);
         }
     }
 }

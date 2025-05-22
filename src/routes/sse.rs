@@ -15,7 +15,9 @@ use uuid::Uuid;
 pub enum SseEvent {
     CrudEvent,
     CrudPerson,
-    ChangeSignUp(Uuid),
+    ChangeSignUp {
+        event_id: Uuid
+    },
 }
 
 impl From<SseEvent> for AxumSseEvent {
@@ -23,8 +25,8 @@ impl From<SseEvent> for AxumSseEvent {
         match value {
             SseEvent::CrudEvent => Self::default().event("crud_event").data(""),
             SseEvent::CrudPerson => Self::default().event("crud_person").data(""),
-            SseEvent::ChangeSignUp(uuid) => Self::default()
-                .event(format!("change_sign_up_{uuid}"))
+            SseEvent::ChangeSignUp{event_id} => Self::default()
+                .event(format!("change_sign_up_{event_id}"))
                 .data(""), //TODO: get the UUID into the data?
         }
     }

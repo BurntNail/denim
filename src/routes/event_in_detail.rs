@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::{
     auth::{AuthUtilities, DenimSession, PermissionsTarget},
     config::date_locale::DateFormat,
@@ -15,9 +16,13 @@ use axum::{
     Form,
     extract::{Path, State},
 };
+use axum::extract::Query;
+use futures::TryStreamExt;
 use maud::{Markup, html};
 use snafu::{OptionExt, ResultExt};
+use sqlx::PgConnection;
 use uuid::Uuid;
+use crate::data::FilterQuery;
 
 #[allow(clippy::too_many_lines)]
 pub async fn get_event(
@@ -31,7 +36,12 @@ pub async fn get_event(
         .context(MissingEventSnafu { id })?;
 
     let signed_up_and_verified = if session.can(PermissionsTarget::VIEW_SENSITIVE_DETAILS) {
-        Some(internal_get_signed_up(State(state.clone()), session.clone(), Path(id)).await?)
+        Some(internal_get_signed_up_with_list(&mut *state.get_connection().await?, &event.signed_up, &event.verified, session.can(PermissionsTarget::VERIFY_ATTENDANCE), id).await?)
+    } else {
+        None
+    };
+    let sign_others_up = if session.can(PermissionsTarget::SIGN_OTHERS_UP) {
+        Some(internal_get_sign_others_up(State(state.clone()), session.clone(), Path(id), Query(FilterQuery{filter: None})).await?)
     } else {
         None
     };
@@ -99,12 +109,87 @@ pub async fn get_event(
                     }
                 }
 
+                @if let Some(sign_others_up) = sign_others_up {
+                    (sign_others_up)
+                } @else {
+                    div;
+                }
+
                 @if let Some(signed_up_and_verified) = signed_up_and_verified {
                     (signed_up_and_verified)
+                } @else {
+                    div;
                 }
             }
         }
     }))
+}
+
+pub async fn internal_get_sign_others_up (
+    State(state): State<DenimState>,
+    session: DenimSession,
+    Path(event_id): Path<Uuid>,
+    Query(FilterQuery {filter}): Query<FilterQuery>
+) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::SIGN_OTHERS_UP)?;
+    let filter = filter.map(|filter| filter.to_lowercase());
+    
+    let students = if let Some(filter) = &filter {
+        let mut all_students = User::get_all_students_with_filter(&state, filter).await?;
+
+        let so_far_here = sqlx::query!("SELECT student_id FROM participation WHERE event_id = $1", event_id)
+            .fetch_all(&mut *state.get_connection().await?)
+            .await
+            .context(MakeQuerySnafu)?
+            .into_iter()
+            .map(|rec| rec.student_id)
+            .collect::<HashSet<_>>();
+
+        all_students.retain(|user| !so_far_here.contains(&user.id));
+
+        all_students
+    } else {
+        vec![]
+    };
+    
+    Ok(html!{
+        div id="sign_others_up" hx-get={"/internal/event/" (event_id) "/sign_others_up"} hx-trigger="sse:crud_person" hx-swap="outerHTML" class="container mx-auto flex flex-col space-y-8 background-gray-800 rounded-lg shadow p-4 m-4" {
+            div class="flex rounded p-4 m-4" {
+                input value=[filter] type="search" name="filter" placeholder="Begin Typing To Search Users..." hx-get={"/internal/event/" (event_id) "/sign_others_up"} hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#sign_others_up" hx-swap="outerHTML" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
+            }
+            ul class="space-y-2" {
+                @for student in students {
+                    li class="bg-gray-700 p-3 rounded" {
+                        (student)
+                        " - "
+                        a class="text-green-300 hover:text-green-800 cursor-pointer underline" hx-post={"/internal/event/" (event_id) "/sign_others_up"} hx-swap="outerHTML" hx-target="#sign_others_up" hx-vals={"{\"id\": \"" (student.id) "\"}" } hx-swap="none" {"Sign Up"}
+                    }
+                }
+            }
+        }
+    })
+}
+
+pub async fn internal_post_sign_others_up(
+    State(state): State<DenimState>,
+    session: DenimSession,
+    Path(event_id): Path<Uuid>,
+    Form(IdForm {id: user_id}): Form<IdForm>
+) -> DenimResult<Markup> {
+    if session.user.as_ref().is_some_and(|user| user.id == user_id) {
+        session.ensure_can(PermissionsTarget::SIGN_SELF_UP)?;
+    } else {
+        session.ensure_can(PermissionsTarget::SIGN_OTHERS_UP)?;
+    }
+    
+    sqlx::query!("INSERT INTO public.participation (event_id, student_id, is_verified) VALUES ($1, $2, false)", event_id, user_id)
+        .execute(&mut *state.get_connection().await?)
+        .await
+        .context(MakeQuerySnafu)?;
+    
+    state.send_sse_event(SseEvent::ChangeSignUp {event_id});
+    
+    internal_get_sign_others_up(State(state), session, Path(event_id), Query(FilterQuery{filter: None})).await
 }
 
 pub async fn internal_post_toggle_self_sign_up(
@@ -121,11 +206,13 @@ pub async fn internal_post_toggle_self_sign_up(
     {
         match sign_up_state {
             EventSignUpState::Nothing => {
-                sqlx::query!("INSERT INTO public.participation (event_id, student_id, is_verified) VALUES ($1, $2, $3)", event_id, user.id, false)
+                sqlx::query!("INSERT INTO public.participation (event_id, student_id, is_verified) VALUES ($1, $2, FALSE)", event_id, user.id)
                     .execute(&mut *conn)
                     .await
                     .context(MakeQuerySnafu)?;
-                state.send_sse_event(SseEvent::ChangeSignUp(event_id));
+                state.send_sse_event(SseEvent::ChangeSignUp {
+                    event_id
+                });
             }
             EventSignUpState::SignedUp => {
                 sqlx::query!(
@@ -136,7 +223,9 @@ pub async fn internal_post_toggle_self_sign_up(
                 .execute(&mut *conn)
                 .await
                 .context(MakeQuerySnafu)?;
-                state.send_sse_event(SseEvent::ChangeSignUp(event_id));
+                state.send_sse_event(SseEvent::ChangeSignUp {
+                    event_id
+                });
             }
             EventSignUpState::Verified => {
                 //can't get out that easily ;)
@@ -162,7 +251,9 @@ pub async fn internal_post_verify(
                 .execute(&mut *conn)
                 .await
                 .context(MakeQuerySnafu)?;
-            state.send_sse_event(SseEvent::ChangeSignUp(event_id));
+            state.send_sse_event(SseEvent::ChangeSignUp {
+                event_id
+            });
         }
         Some(EventSignUpState::Nothing) => {
             info!(
@@ -226,38 +317,12 @@ pub async fn internal_get_signup_button(
     })
 }
 
-pub async fn internal_get_signed_up(
-    State(state): State<DenimState>,
-    session: DenimSession,
-    Path(id): Path<Uuid>,
-) -> DenimResult<Markup> {
-    session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
-
-    let mut conn = state.get_connection().await?;
-
-    let mut signed_up = vec![];
-    let mut verified = vec![];
-
-    for rec in sqlx::query!(
-        "SELECT student_id, is_verified FROM participation WHERE event_id = $1",
-        id
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .context(MakeQuerySnafu)?
-    {
-        if rec.is_verified {
-            verified.push(rec.student_id);
-        } else {
-            signed_up.push(rec.student_id);
-        }
-    }
-    let signed_up_students = User::get_from_iter_of_ids(signed_up, &mut conn).await?;
-    let verified_students = User::get_from_iter_of_ids(verified, &mut conn).await?;
-    let can_verify = session.can(PermissionsTarget::VERIFY_ATTENDANCE);
+async fn internal_get_signed_up_with_list (conn: &mut PgConnection, signed_up: &[Uuid], verified: &[Uuid], can_verify: bool, id: Uuid) -> DenimResult<Markup> {
+    let signed_up_students = User::get_from_iter_of_ids(signed_up.iter().copied(), &mut *conn).await?;
+    let verified_students = User::get_from_iter_of_ids(verified.iter().copied(), &mut *conn).await?;
 
     Ok(html! {
-        div id="signed_up_and_verified" class="grid grid-cols-1 md:grid-cols-2 gap-6" hx-get={"/internal/event/" (id) "/signed_up_and_verified"} hx-trigger={"sse:change_sign_up_" (id)} {
+        div id="signed_up_and_verified" class="grid grid-cols-1 md:grid-cols-2 gap-6" hx-get={"/internal/event/" (id) "/signed_up_and_verified"} hx-trigger={"sse:change_sign_up_" (id)} hx-swap="outerHTML" {
             div {
                 h3 class="text-xl font-semibold text-white mb-4" {"Signed Up Students (currently " (signed_up_students.len()) "): " }
                 ul class="space-y-2 text-gray-100" {
@@ -284,4 +349,30 @@ pub async fn internal_get_signed_up(
             }
         }
     })
+}
+
+pub async fn internal_get_signed_up(
+    State(state): State<DenimState>,
+    session: DenimSession,
+    Path(id): Path<Uuid>,
+) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::VIEW_SENSITIVE_DETAILS)?;
+
+    let mut conn = state.get_connection().await?;
+
+    let mut signed_up = vec![];
+    let mut verified = vec![];
+    
+    let mut participation_stream = sqlx::query!("SELECT student_id, is_verified FROM participation WHERE event_id = $1", id)
+        .fetch(&mut *conn);
+    while let Some(record) = participation_stream.try_next().await.context(MakeQuerySnafu)? {
+        if record.is_verified {
+            verified.push(record.student_id);
+        } else {
+            signed_up.push(record.student_id);
+        }
+    }
+    drop(participation_stream);
+    
+    internal_get_signed_up_with_list(&mut conn, &signed_up, &verified, session.can(PermissionsTarget::VERIFY_ATTENDANCE), id).await
 }

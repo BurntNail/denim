@@ -26,6 +26,7 @@ pub struct RuntimeConfiguration {
 }
 
 impl RuntimeConfiguration {
+    #[allow(clippy::cognitive_complexity)]
     pub async fn new() -> DenimResult<Self> {
         let s3_bucket = ImportantItemContainer::new();
         let mut auth_config_and_date_locale_config = None;
