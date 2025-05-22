@@ -99,7 +99,7 @@ pub async fn post_login(
                     return Ok(Redirect::to("/onboarding"));
                 }
 
-                let next = next.as_deref().unwrap_or("");
+                let next = next.as_deref().unwrap_or("/");
                 Ok(if user.current_password_is_default {
                     Redirect::to(&format!("/replace_default_password?next={next}"))
                 } else {
