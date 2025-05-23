@@ -102,7 +102,6 @@ CREATE TABLE sessions (
 CREATE TABLE photos (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id uuid NOT NULL,
-    content_type TEXT NOT NULL,
     extension TEXT NOT NULL,
 
     CONSTRAINT event_id_fk

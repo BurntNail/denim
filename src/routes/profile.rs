@@ -130,7 +130,7 @@ pub async fn internal_get_profile_student_display(
         {
             event_details.push([
                 html! {
-                    a href={"/event/" (event.id)} class="underline text-blue-300" {(event.name)}
+                    a href={"/event/" (event.id)} class="underline hover:text-blue-300" {(event.name)}
                 },
                 html! {
                     (dlc.short_ymd(&event.datetime)?)

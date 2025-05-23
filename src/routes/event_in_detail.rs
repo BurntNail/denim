@@ -5,6 +5,7 @@ use crate::{
         DataType, FilterQuery, IdForm,
         event::{Event, EventSignUpState},
         user::User,
+        photo::Photo,
     },
     error::{DenimResult, MakeQuerySnafu, MissingEventSnafu},
     maud_conveniences::supertitle,
@@ -17,10 +18,15 @@ use axum::{
 };
 use futures::TryStreamExt;
 use maud::{Markup, html};
-use snafu::{OptionExt, ResultExt};
+use snafu::{ensure, OptionExt, ResultExt};
 use sqlx::PgConnection;
 use std::collections::HashSet;
+use axum::extract::Multipart;
+use infer::MatcherType;
 use uuid::Uuid;
+use crate::data::photo::NewPhotoForm;
+use crate::error::{DenimError, InvalidImageSnafu, MultipartSnafu};
+use crate::maud_conveniences::{form_submit_button, subtitle};
 
 #[allow(clippy::too_many_lines)]
 pub async fn get_event(
@@ -61,6 +67,12 @@ pub async fn get_event(
         None
     };
 
+    let sign_up_button = if session.can(PermissionsTarget::SIGN_SELF_UP) {
+        Some(internal_get_signup_button(State(state.clone()), session.clone(), Path(event.id)).await?)
+    } else {
+        None
+    };
+
     let extra_info = event.extra_info.map(|extra_info| {
         html! {
             div {
@@ -72,8 +84,12 @@ pub async fn get_event(
         }
     });
 
-    let sign_up_button =
-        internal_get_signup_button(State(state.clone()), session.clone(), Path(event.id)).await?;
+    
+    let photos = if session.can(PermissionsTarget::VIEW_PHOTOS) || session.can(PermissionsTarget::UPLOAD_PHOTOS) {
+        Some(internal_get_photos(State(state.clone()), session.clone(), Path(id)).await?)
+    } else {
+        None
+    };
 
     let dlc = state.config().date_locale_config().get()?;
 
@@ -112,7 +128,12 @@ pub async fn get_event(
                             p class="text-gray-500 text-lg" {"None Assigned"}
                         }
                     }
-                    (sign_up_button)
+                    @if let Some(photos) = photos {
+                        (photos)
+                    }
+                    @if let Some(sign_up_button) = sign_up_button {
+                        (sign_up_button)
+                    }
                 }
 
                 div class="mb-8" {
@@ -126,18 +147,106 @@ pub async fn get_event(
 
                 @if let Some(sign_others_up) = sign_others_up {
                     (sign_others_up)
-                } @else {
-                    div;
                 }
 
                 @if let Some(signed_up_and_verified) = signed_up_and_verified {
                     (signed_up_and_verified)
-                } @else {
-                    div;
                 }
             }
         }
     }))
+}
+
+pub async fn internal_get_photos(State(state): State<DenimState>, session: DenimSession, Path(event_id): Path<Uuid>) -> DenimResult<Markup> {
+    let (can_view_photos, can_upload_photos) = (session.can(PermissionsTarget::VIEW_PHOTOS), session.can(PermissionsTarget::UPLOAD_PHOTOS));
+
+    if !(can_view_photos || can_upload_photos) {
+        return Err(DenimError::IncorrectPermissions {
+            needed: PermissionsTarget::VIEW_PHOTOS,
+            found: session.get_permissions(),
+        });
+    }
+
+    let links = if can_view_photos {
+        let mut links = vec![];
+        let bucket = state.config().s3_bucket().get()?;
+        for photo in Photo::get_by_event_id(event_id, &mut *state.get_connection().await?).await? {
+            links.push(photo.get_s3_url(&bucket).await?);
+        }
+
+        Some(html!{
+            div class="flex flex-col space-y-2" {
+                p class="text-gray-300 text-sm" {"Photos:"}
+                ul class="list-disc pl-5 overflow-y-clip overflow-y-scroll max-h-64 p-2 m-4" {
+                    @if links.is_empty() {
+                        p class="text-gray-100 italic text-sm" {"(no photos uploaded yet)"}
+                        br;
+                    } @else {
+                        @for (index, link) in links.into_iter().enumerate() {
+                            li {
+                                a href={(link)} target="_blank" class="text-gray-100 hover:text-blue-300 underline" {
+                                    "Photo " (index + 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    } else {
+        None
+    };
+
+    Ok(html!{
+        div id="photos" hx-trigger={"sse:change_photos_" (event_id)} hx-swap="outerHTML" {
+            @if let Some(links) = links {
+                (links)
+            }
+            @if can_upload_photos {
+                p class="text-gray-300 text-sm" {"Upload more Photos:"}
+                div class="flex flex-col space-y-2 p-2" {
+                    form hx-post={"/internal/event/" (event_id) "/photos"} hx-swap="outerHTML" hx-target="#photos" hx-encoding="multipart/form-data" {
+                        label for="photos" class="block text-sm font-medium text-gray-400 mb-2" {"Photos to Upload"}
+                        input multiple type="file" name="photos" id="photos" accept="image/*" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 mb-4";
+                        (form_submit_button(Some("Upload Photos")))
+                    }
+                }
+            }
+        }
+    })
+}
+
+pub async fn internal_post_photos(State(state): State<DenimState>, session: DenimSession, Path(event_id): Path<Uuid>, mut multipart: Multipart) -> DenimResult<Markup> {
+    session.ensure_can(PermissionsTarget::VIEW_PHOTOS)?;
+    let bucket = state.config().s3_bucket().get()?;
+    
+    loop {
+        let Some(field) = multipart.next_field().await.context(MultipartSnafu)? else {
+            break;
+        };
+        
+        let bytes = field.bytes().await.context(MultipartSnafu)?;
+        let inferred_type = infer::get(&bytes).context(InvalidImageSnafu {found_mime: None})?;
+        
+        let content_type = inferred_type.mime_type();
+        ensure!(inferred_type.matcher_type() == MatcherType::Image, InvalidImageSnafu {found_mime: Some(content_type)});
+        
+        let transaction = state.get_transaction().await?;
+        
+        Photo::insert_into_database_transaction(
+            NewPhotoForm {
+                bytes: bytes.to_vec(),
+                content_type,
+                extension: inferred_type.extension(),
+                s3_bucket_to_add_to: bucket.clone(),
+                event_id,
+            },
+            transaction
+        ).await?;
+    }
+    
+    
+    internal_get_photos(State(state), session, Path(event_id)).await
 }
 
 pub async fn internal_get_sign_others_up(
@@ -172,8 +281,9 @@ pub async fn internal_get_sign_others_up(
 
     Ok(html! {
         div id="sign_others_up" hx-get={"/internal/event/" (event_id) "/sign_others_up"} hx-trigger="sse:crud_person" hx-swap="outerHTML" class="container mx-auto flex flex-col space-y-8 background-gray-800 rounded-lg shadow p-4 m-4" {
+            (subtitle("Student Participation"))
             div class="flex rounded p-4 m-4" {
-                input value=[filter] type="search" name="filter" placeholder="Begin Typing To Search Users..." hx-get={"/internal/event/" (event_id) "/sign_others_up"} hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#sign_others_up" hx-swap="outerHTML" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
+                input value=[filter] type="search" name="filter" placeholder="Search here to sign up students..." hx-get={"/internal/event/" (event_id) "/sign_others_up"} hx-trigger="input changed delay:500ms, keyup[key=='Enter']" hx-target="#sign_others_up" hx-swap="outerHTML" class="shadow appearance-none border rounded w-full py-2 px-3 leading-tight focus:outline-none focus:shadow-outline bg-gray-700 border-gray-600";
             }
             ul class="space-y-2" {
                 @for student in students {

@@ -6,7 +6,7 @@ use sqlx::{PgConnection, Pool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub mod event;
-mod photo;
+pub mod photo;
 pub mod student_groups;
 pub mod user;
 

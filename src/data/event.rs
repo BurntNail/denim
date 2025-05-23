@@ -89,18 +89,7 @@ impl DataType for Event {
         }
         drop(participation_stream);
 
-        let mut photos = vec![];
-        for photo_id in sqlx::query!("SELECT id FROM photos WHERE event_id = $1", id)
-            .fetch_all(&mut *conn)
-            .await
-            .context(MakeQuerySnafu)?
-        {
-            if let Some(photo) = Photo::get_from_db_by_id(photo_id.id, &mut *conn).await? {
-                photos.push(photo);
-            } else {
-                warn!(?photo_id.id, "Missing Photo?");
-            }
-        }
+        let photos = Photo::get_by_event_id(id, conn).await?;
 
         Ok(Some(Self {
             id,

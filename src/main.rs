@@ -53,8 +53,11 @@ use axum_login::{
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use tokio::{net::TcpListener, signal};
+use tower_http::compression::CompressionLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use crate::routes::event_in_detail::{internal_get_photos, internal_post_photos};
 
 #[macro_use]
 extern crate tracing;
@@ -233,9 +236,14 @@ async fn main() {
             "/internal/event/{id}/sign_others_up",
             get(internal_get_sign_others_up).post(internal_post_sign_others_up),
         )
+        .route("/internal/event/{id}/photos",
+            get(internal_get_photos).post(internal_post_photos)
+        )
         .route("/sse_feed", get(sse_feed))
         .layer(auth_layer)
         .layer(trace_layer)
+        .layer(RequestBodyLimitLayer::new(50 * 1000 * 1000)) //50MB
+        .layer(CompressionLayer::new())
         .with_state(state.clone());
 
     let server_ip = env::var("DENIM_SERVER_IP").unwrap_or_else(|_| "127.0.0.1:8080".to_string());

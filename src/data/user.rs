@@ -238,7 +238,8 @@ impl UserKind {
     pub fn get_permissions(&self) -> PermissionsTarget {
         match self {
             Self::User => {
-                PermissionsTarget::VIEW_PHOTOS | PermissionsTarget::VIEW_SENSITIVE_DETAILS
+                PermissionsTarget::VIEW_PHOTOS 
+                    | PermissionsTarget::VIEW_SENSITIVE_DETAILS
             }
             Self::Student { .. } => {
                 PermissionsTarget::VIEW_PHOTOS
@@ -253,6 +254,7 @@ impl UserKind {
                     | PermissionsTarget::VIEW_PHOTOS
                     | PermissionsTarget::EXPORT_CSVS
                     | PermissionsTarget::VIEW_SENSITIVE_DETAILS
+                    | PermissionsTarget::UPLOAD_PHOTOS
             }
             Self::Admin => PermissionsTarget::all() - PermissionsTarget::SIGN_SELF_UP,
         }

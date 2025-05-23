@@ -120,6 +120,10 @@ pub enum DenimError {
         datatype_name
     ))]
     TransactionMustBeUsed { datatype_name: &'static str },
+    #[snafu(display("Invalid Image uploaded of mime type: {:?} - should be an image type", found_mime))]
+    InvalidImage {
+        found_mime: Option<&'static str>
+    }
 }
 
 impl From<axum_login::Error<DenimAuthBackend>> for DenimError {
@@ -155,7 +159,7 @@ impl IntoResponse for DenimError {
 
             html! {
                 div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 flex flex-col" role="alert" {
-                    strong class="font-bold" {"Denim Error"}
+                    strong class="font-bold" {"Denim Error - " (status_code)}
                     br;
                     span {(desc)}
                     br;
@@ -204,6 +208,7 @@ impl IntoResponse for DenimError {
             Self::InvalidCalendarAlgorithm { .. } => BI,
             Self::InvalidLocale { .. } => BI,
             Self::TransactionMustBeUsed { .. } => ISE,
+            Self::InvalidImage { .. } => BI,
         };
 
         //painfully, has to return a 200 OK to get by with htmx, smh

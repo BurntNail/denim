@@ -38,6 +38,7 @@ use std::{
 use tokio::sync::watch::channel;
 use uuid::Uuid;
 use zip::{AesMode, ZipWriter, write::SimpleFileOptions};
+use crate::maud_conveniences::subtitle;
 
 #[derive(Deserialize)]
 pub struct NewCSVStudent {
@@ -63,7 +64,7 @@ pub async fn get_import_export_page(
                 div class="flex flex-col rounded shadow-xl bg-gray-800 p-4 m-4" {
                     p class="text-lg" {
                         "Before you can Import or Export, you must finish "
-                        a href="/onboarding" class="text-blue-300 underline" {"onboarding"}
+                        a href="/onboarding" class="hover:text-blue-300 underline" {"onboarding"}
                         "."
                     }
                 }
@@ -142,7 +143,7 @@ pub async fn get_import_export_page(
                         (job_already_running)
                     } @else {
                         div class="overflow-scroll overflow-clip" {
-                            h3 class="text-xl font-semibold mb-4" {"Import Students"}
+                            (subtitle("Import Students"))
                             div id="import_people_forms" {
                                 (table(
                                     subsubtitle("CSV Format"),
@@ -160,7 +161,7 @@ pub async fn get_import_export_page(
                                 br;
                                 form hx-put="/import_export/import_people" hx-swap="innerHTML" hx-target="#import_people_forms" hx-encoding="multipart/form-data" {
                                     label for="people_csv" class="block text-sm font-medium text-gray-400 mb-2" {"Upload Students CSV"}
-                                    input multiple type="file" name="people_csv" id="people_csv" accept=".csv" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 mb-4";
+                                    input multiple type="file" name="people_csv" id="people_csv" accept="application/csv" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 mb-4";
                                     (form_submit_button(Some("Import People")))
                                 }
                             }

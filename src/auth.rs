@@ -19,6 +19,7 @@ pub type DenimSession = AuthSession<DenimAuthBackend>;
 pub trait AuthUtilities {
     fn can(&self, needed: PermissionsTarget) -> bool;
     fn ensure_can(&self, needed: PermissionsTarget) -> DenimResult<()>;
+    fn get_permissions (&self) -> PermissionsTarget;
 }
 
 impl AuthUtilities for DenimSession {
@@ -41,6 +42,13 @@ impl AuthUtilities for DenimSession {
             Err(DenimError::IncorrectPermissions { needed, found })
         }
     }
+
+    fn get_permissions(&self) -> PermissionsTarget {
+        self
+            .user
+            .as_ref()
+            .map_or_else(PermissionsTarget::empty, User::get_permissions)
+    }
 }
 
 bitflags! {
@@ -61,6 +69,7 @@ bitflags! {
         const VIEW_SENSITIVE_DETAILS =   0b0000_0010_0000_0000;
 
         const RUN_ONBOARDING =           0b0000_0100_0000_0000;
+        const UPLOAD_PHOTOS =            0b0000_1000_0000_0000;
     }
 }
 

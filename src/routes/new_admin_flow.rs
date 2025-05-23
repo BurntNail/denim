@@ -651,7 +651,7 @@ fn get_all_finished() -> Markup {
         br;
         p {
             "A common next step is to "
-            a class="text-blue-300 underline" href="/import_export" {"import events and students"}
+            a class="hover:text-blue-300 underline" href="/import_export" {"import events and students"}
             "."
         }
     }
